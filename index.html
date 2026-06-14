@@ -185,7 +185,6 @@ body {
 .style-swatch.active { border-color: #e94560; box-shadow: 0 0 8px rgba(233,69,96,0.4); }
 .swatch-streets { background: linear-gradient(180deg, #e8e0d8 0%, #d4c8b8 50%, #b8d0a8 100%); color: #333; }
 .swatch-dark { background: linear-gradient(180deg, #2a2a3e 0%, #1a1a2e 50%, #0a0a1e 100%); color: #ccc; }
-.swatch-satellite { background: linear-gradient(180deg, #4a6741 0%, #3a5731 50%, #2a4721 100%); color: #c8e8c0; }
 
 /* ===== MapLibre Building Toggle ===== */
 .building-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
@@ -221,9 +220,8 @@ body {
     <div style="margin-bottom:10px">
       <div style="font-size:0.72rem;color:#888;margin-bottom:6px">🎨 样式切换</div>
       <div class="style-swatches" id="styleSwatches">
-        <div class="style-swatch swatch-streets active" data-style="vec">矢量</div>
+        <div class="style-swatch swatch-streets active" data-style="voyager">街图</div>
         <div class="style-swatch swatch-dark" data-style="dark">暗色</div>
-        <div class="style-swatch swatch-satellite" data-style="satellite">卫星</div>
       </div>
     </div>
 
@@ -932,7 +930,7 @@ document.getElementById('btnMeasureClear').addEventListener('click', () => {
    ============================================================ */
 let maplibreMap = null;
 let maplibreInitialized = false;
-let mlCurrentStyle = 'vec';
+let mlCurrentStyle = 'voyager';
 let mlPoisLoaded = false;
 const ML_MAP_CENTER = [MAP_CENTER[1], MAP_CENTER[0]];
 const ML_MAP_ZOOM   = MAP_ZOOM - 0.5;
@@ -943,45 +941,35 @@ function buildStyleJSON() {
     version: 8,
     name: 'beijing-basemap',
     sources: {
-      'osm-base': {
+      'carto-voyager': {
         type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256, maxzoom: 19,
-        attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-      },
-      'tianditu-label': {
-        type: 'raster',
-        tiles: ['https://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=' + TIANDITU_KEY],
-        tileSize: 256, maxzoom: 18
+        tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'],
+        tileSize: 256, maxzoom: 20,
+        attribution: '&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://openstreetmap.org">OSM</a>'
       }
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': '#f2efe9' } },
-      { id: 'osm-base', type: 'raster', source: 'osm-base' },
-      { id: 'tdt-label', type: 'raster', source: 'tianditu-label' }
+      { id: 'carto-voyager', type: 'raster', source: 'carto-voyager' }
     ]
   };
 }
 
 // Build satellite style
 function buildSatelliteJSON() {
-  const subdomains = ['0','1','2','3','4','5','6','7'];
-  const imgUrls = subdomains.map(s =>
-    `https://t${s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
-  );
-  const ciaUrls = subdomains.map(s =>
-    `https://t${s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
-  );
   return {
-    version: 8, name: 'beijing-satellite',
+    version: 8, name: 'beijing-dark',
     sources: {
-      'tianditu-img': { type: 'raster', tiles: imgUrls, tileSize: 256, maxzoom: 18 },
-      'tianditu-cia': { type: 'raster', tiles: ciaUrls, tileSize: 256, maxzoom: 18 }
+      'carto-dark': {
+        type: 'raster',
+        tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'],
+        tileSize: 256, maxzoom: 20,
+        attribution: '&copy; <a href="https://carto.com">CARTO</a>'
+      }
     },
     layers: [
-      { id: 'background-sat', type: 'background', paint: { 'background-color': '#1a2a1a' } },
-      { id: 'tdt-img', type: 'raster', source: 'tianditu-img' },
-      { id: 'tdt-cia', type: 'raster', source: 'tianditu-cia' }
+      { id: 'background-dark', type: 'background', paint: { 'background-color': '#1a1a2e' } },
+      { id: 'carto-dark', type: 'raster', source: 'carto-dark' }
     ]
   };
 }
@@ -1190,7 +1178,7 @@ function applyMapLibreStyle(styleName) {
   if (!maplibreMap || !maplibreInitialized) return;
   mlCurrentStyle = styleName;
 
-  const newStyle = styleName === 'satellite' ? buildSatelliteJSON() : buildStyleJSON();
+  const newStyle = styleName === 'dark' ? buildSatelliteJSON() : buildStyleJSON();
 
   maplibreMap.setStyle(newStyle, { diff: false });
   maplibreMap.once('style.load', () => {
@@ -1270,14 +1258,15 @@ function initMapLibre() {
 
     maplibreInitialized = true;
     document.getElementById('mlStatus').textContent =
-      'Style JSON 矢量风格 | 数据驱动 POI (match) + fill-extrusion 建筑';
+      'Style JSON (CARTO Voyager) | data-driven POI + fill-extrusion 建筑';
   });
 
   // Error logging
   maplibreMap.on('error', (e) => {
-    console.warn('MapLibre error:', e.error ? e.error.message : e);
+    const msg = e.error ? (e.error.message || e.error.status || e.error) : e;
+    console.warn('MapLibre error:', msg, e);
     document.getElementById('mlStatus').textContent =
-      '样式: vec | ⚠ 地图加载错误，请查看控制台';
+      '⚠ CARTO底图加载失败: ' + String(msg).substring(0,40);
   });
 
   // Style swatch events (only bind once)
