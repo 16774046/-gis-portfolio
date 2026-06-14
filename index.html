@@ -931,28 +931,27 @@ let mlPoisLoaded = false;
 const ML_MAP_CENTER = [MAP_CENTER[1], MAP_CENTER[0]];
 const ML_MAP_ZOOM   = MAP_ZOOM - 0.5;
 
-// ----- Build style JSON (Tianditu WMTS, XYZ convention — matching Leaflet) -----
+// ----- Build style JSON (OSM raster base + Tianditu annotation) -----
 function buildStyleJSON() {
-  // Leaflet uses DEFAULT XYZ scheme (y=0 at TOP), 天地图 WMTS also accepts this.
-  // Do NOT use scheme:'tms' — it inverts y and causes 403.
-  const subdomains = ['0','1','2','3','4','5','6','7'];
-  const vecUrls = subdomains.map(s =>
-    `https://t${s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
-  );
-  const cvaUrls = subdomains.map(s =>
-    `https://t${s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
-  );
-
   return {
     version: 8,
-    name: 'beijing-tianditu',
+    name: 'beijing-basemap',
     sources: {
-      'tianditu-base': { type: 'raster', tiles: vecUrls, tileSize: 256, maxzoom: 18 },
-      'tianditu-label': { type: 'raster', tiles: cvaUrls, tileSize: 256, maxzoom: 18 }
+      'osm-base': {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256, maxzoom: 19,
+        attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+      },
+      'tianditu-label': {
+        type: 'raster',
+        tiles: ['https://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=' + TIANDITU_KEY],
+        tileSize: 256, maxzoom: 18
+      }
     },
     layers: [
-      { id: 'background', type: 'background', paint: { 'background-color': '#f5f0e8' } },
-      { id: 'tdt-base', type: 'raster', source: 'tianditu-base' },
+      { id: 'background', type: 'background', paint: { 'background-color': '#f2efe9' } },
+      { id: 'osm-base', type: 'raster', source: 'osm-base' },
       { id: 'tdt-label', type: 'raster', source: 'tianditu-label' }
     ]
   };
@@ -968,7 +967,7 @@ function buildSatelliteJSON() {
     `https://t${s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
   );
   return {
-    version: 8, name: 'beijing-tianditu-sat',
+    version: 8, name: 'beijing-satellite',
     sources: {
       'tianditu-img': { type: 'raster', tiles: imgUrls, tileSize: 256, maxzoom: 18 },
       'tianditu-cia': { type: 'raster', tiles: ciaUrls, tileSize: 256, maxzoom: 18 }
