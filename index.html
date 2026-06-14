@@ -227,7 +227,7 @@ body {
 
     <div class="building-toggle" id="buildingToggle" style="margin-bottom:8px">
       <input type="checkbox" id="chkBuildings" checked>
-      <label for="chkBuildings">🏢 建筑 3D 拉伸 (fill-extrusion · 12栋地标)</label>
+      <label for="chkBuildings">🏢 建筑 3D 拉伸 (fill-extrusion · 12栋)</label>
     </div>
 
     <div style="font-size:0.6rem;color:#555;margin-bottom:6px">
@@ -932,8 +932,8 @@ let maplibreMap = null;
 let maplibreInitialized = false;
 let mlCurrentStyle = 'voyager';
 let mlPoisLoaded = false;
-const ML_MAP_CENTER = [MAP_CENTER[1], MAP_CENTER[0]];
-const ML_MAP_ZOOM   = MAP_ZOOM - 0.5;
+const ML_MAP_CENTER = [116.461, 39.909];  // Guomao CBD (tallest buildings)
+const ML_MAP_ZOOM   = 14.5;              // Zoom in for 3D building visibility
 
 // ----- Build style JSON (OSM raster base + Tianditu annotation) -----
 function buildStyleJSON() {
@@ -1093,102 +1093,75 @@ function buildPOIGeoJSON() {
 // ----- Build fill-extrusion layer from EMBEDDED building data (Lecture 11) -----
 let mlBuildingsLoaded = false;
 
-function getEmbeddedBuildings() {
-  return [
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3965,39.9050],[116.3985,39.9050],[116.3985,39.9035],[116.3965,39.9035],[116.3965,39.9050]]]},"properties":{"name":"天安门城楼","height":34,"levels":5,"type":"landmark"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3970,39.9175],[116.3985,39.9180],[116.3990,39.9165],[116.3975,39.9160],[116.3970,39.9175]]]},"properties":{"name":"故宫太和殿","height":35,"levels":3,"type":"landmark"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4055,39.8830],[116.4075,39.8830],[116.4075,39.8815],[116.4055,39.8815],[116.4055,39.8830]]]},"properties":{"name":"天坛祈年殿","height":38,"levels":3,"type":"landmark"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4590,39.9095],[116.4615,39.9100],[116.4620,39.9080],[116.4600,39.9075],[116.4590,39.9095]]]},"properties":{"name":"国贸三期A座","height":330,"levels":74,"type":"skyscraper"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4620,39.9105],[116.4640,39.9110],[116.4645,39.9090],[116.4625,39.9085],[116.4620,39.9105]]]},"properties":{"name":"中国尊（中信大厦）","height":528,"levels":108,"type":"skyscraper"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3830,39.9225],[116.3850,39.9230],[116.3860,39.9210],[116.3840,39.9205],[116.3830,39.9225]]]},"properties":{"name":"西单大悦城","height":60,"levels":12,"type":"commercial"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3900,39.9040],[116.3930,39.9045],[116.3935,39.9025],[116.3905,39.9020],[116.3900,39.9040]]]},"properties":{"name":"国家大剧院","height":46,"levels":3,"type":"landmark"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3890,39.9925],[116.3920,39.9930],[116.3925,39.9905],[116.3895,39.9900],[116.3890,39.9925]]]},"properties":{"name":"国家体育场(鸟巢)","height":69,"levels":7,"type":"landmark"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3830,39.9920],[116.3855,39.9925],[116.3860,39.9905],[116.3835,39.9900],[116.3830,39.9920]]]},"properties":{"name":"国家游泳中心(水立方)","height":31,"levels":4,"type":"landmark"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4580,39.9070],[116.4605,39.9075],[116.4610,39.9055],[116.4585,39.9050],[116.4580,39.9070]]]},"properties":{"name":"银泰中心","height":250,"levels":63,"type":"skyscraper"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4780,39.9960],[116.4805,39.9965],[116.4810,39.9945],[116.4785,39.9940],[116.4780,39.9960]]]},"properties":{"name":"望京SOHO","height":200,"levels":45,"type":"skyscraper"}},
-    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3910,39.9055],[116.3925,39.9060],[116.3930,39.9045],[116.3915,39.9040],[116.3910,39.9055]]]},"properties":{"name":"中国国家博物馆","height":42,"levels":5,"type":"culture"}}
-  ];
-}
-
 function buildBuildingsLayer() {
-  // Try fetch first, fallback to embedded data
-  let dataPromise;
+  // Embedded Beijing landmark buildings as GeoJSON FeatureCollection
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4593,39.9101],[116.4615,39.9105],[116.4622,39.9083],[116.4600,39.9079],[116.4593,39.9101]]]},"properties":{"name":"国贸三期A","height":330,"type":"skyscraper"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4625,39.9108],[116.4647,39.9112],[116.4653,39.9090],[116.4630,39.9086],[116.4625,39.9108]]]},"properties":{"name":"中国尊","height":528,"type":"skyscraper"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4578,39.9075],[116.4602,39.9079],[116.4608,39.9057],[116.4584,39.9053],[116.4578,39.9075]]]},"properties":{"name":"银泰中心","height":250,"type":"skyscraper"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4778,39.9965],[116.4805,39.9969],[116.4812,39.9947],[116.4785,39.9943],[116.4778,39.9965]]]},"properties":{"name":"望京SOHO","height":200,"type":"skyscraper"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3965,39.9053],[116.3988,39.9053],[116.3988,39.9037],[116.3965,39.9037],[116.3965,39.9053]]]},"properties":{"name":"天安门","height":34,"type":"landmark"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3968,39.9178],[116.3988,39.9182],[116.3995,39.9165],[116.3975,39.9161],[116.3968,39.9178]]]},"properties":{"name":"故宫太和殿","height":35,"type":"landmark"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4055,39.8832],[116.4077,39.8832],[116.4077,39.8815],[116.4055,39.8815],[116.4055,39.8832]]]},"properties":{"name":"天坛祈年殿","height":38,"type":"landmark"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3893,39.9932],[116.3913,39.9936],[116.3918,39.9914],[116.3898,39.9910],[116.3893,39.9932]]]},"properties":{"name":"鸟巢","height":69,"type":"landmark"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3835,39.9918],[116.3858,39.9922],[116.3865,39.9903],[116.3842,39.9899],[116.3835,39.9918]]]},"properties":{"name":"水立方","height":31,"type":"landmark"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3897,39.9045],[116.3925,39.9049],[116.3932,39.9028],[116.3904,39.9024],[116.3897,39.9045]]]},"properties":{"name":"国家大剧院","height":46,"type":"landmark"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3828,39.9230],[116.3853,39.9234],[116.3860,39.9212],[116.3835,39.9208],[116.3828,39.9230]]]},"properties":{"name":"西单大悦城","height":60,"type":"commercial"}},
+      {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3910,39.9060],[116.3928,39.9064],[116.3933,39.9045],[116.3915,39.9041],[116.3910,39.9060]]]},"properties":{"name":"国家博物馆","height":42,"type":"culture"}}
+    ]
+  };
 
   try {
-    dataPromise = fetch('data/beijing-buildings.geojson')
-      .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .catch(() => null); // fetch failed → use embedded
-  } catch(e) { dataPromise = Promise.resolve(null); }
-
-  (dataPromise || Promise.resolve(null)).then(geojson => {
-    // Fallback to embedded
-    if (!geojson || !geojson.features) {
-      geojson = { type: 'FeatureCollection', features: getEmbeddedBuildings() };
+    if (maplibreMap.getSource('beijing-buildings')) {
+      maplibreMap.getSource('beijing-buildings').setData(geojson);
+    } else {
+      maplibreMap.addSource('beijing-buildings', { type: 'geojson', data: geojson });
     }
 
-    try {
-      if (maplibreMap.getSource('beijing-buildings')) {
-        maplibreMap.getSource('beijing-buildings').setData(geojson);
-      } else {
-        maplibreMap.addSource('beijing-buildings', { type: 'geojson', data: geojson });
-      }
+    if (!maplibreMap.getLayer('buildings-3d')) {
+      maplibreMap.addLayer({
+        id: 'buildings-3d',
+        type: 'fill-extrusion',
+        source: 'beijing-buildings',
+        minzoom: 10,
+        paint: {
+          'fill-extrusion-height': ['*', ['get', 'height'], 3],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.85,
+          'fill-extrusion-color': [
+            'match', ['get', 'type'],
+            'skyscraper', '#37474f',
+            'landmark', '#bf360c',
+            'commercial', '#ad1457',
+            'culture', '#6a1b9a',
+            '#757575'
+          ]
+        }
+      });
 
-      if (!maplibreMap.getLayer('buildings-3d')) {
-        maplibreMap.addLayer({
-          id: 'buildings-3d',
-          type: 'fill-extrusion',
-          source: 'beijing-buildings',
-          paint: {
-            'fill-extrusion-height': ['get', 'height'],
-            'fill-extrusion-base': 0,
-            'fill-extrusion-opacity': 0.8,
-            'fill-extrusion-color': [
-              'match', ['get', 'type'],
-              'skyscraper', '#607d8b',
-              'landmark', '#8d6e63',
-              'commercial', '#f48fb1',
-              'education', '#80cbc4',
-              'culture', '#ce93d8',
-              '#bdbdbd'
-            ]
-          }
-        });
+      // Popup on click
+      const bldgPopup = new maplibregl.Popup({ offset: [0, -30], closeButton: true, maxWidth: '220px' });
+      maplibreMap.on('click', 'buildings-3d', (e) => {
+        const p = e.features[0].properties;
+        bldgPopup.setLngLat(e.lngLat).setHTML(
+          `<div style="font-family:sans-serif"><h4 style="margin:0 0 4px">${p.name}</h4><span style="font-size:0.8rem;color:#888">${p.height}m · ${p.type}</span></div>`
+        ).addTo(maplibreMap);
+      });
 
-        maplibreMap.addLayer({
-          id: 'building-labels',
-          type: 'symbol',
-          source: 'beijing-buildings',
-          layout: {
-            'text-field': ['get', 'name'],
-            'text-font': ['Open Sans Bold'],
-            'text-size': 9,
-            'text-anchor': 'top',
-            'text-offset': [0, -0.5]
-          },
-          paint: { 'text-color': '#333', 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
-        });
-
-        const bldgPopup = new maplibregl.Popup({ offset: [0, -20], closeButton: true, maxWidth: '240px' });
-        maplibreMap.on('click', 'buildings-3d', (e) => {
-          const p = e.features[0].properties;
-          bldgPopup.setLngLat(e.lngLat).setHTML(
-            `<div style="font-family:sans-serif;min-width:160px"><h4 style="margin:0 0 4px;color:#455a64">${p.name}</h4><table style="font-size:0.78rem;line-height:1.6"><tr><td style="color:#888">高度</td><td><b>${p.height}m</b></td></tr><tr><td style="color:#888">楼层</td><td><b>${p.levels}层</b></td></tr><tr><td style="color:#888">类型</td><td><b>${p.type}</b></td></tr></table></div>`
-          ).addTo(maplibreMap);
-        });
-
-        maplibreMap.on('mouseenter', 'buildings-3d', () => { maplibreMap.getCanvas().style.cursor = 'pointer'; });
-        maplibreMap.on('mouseleave', 'buildings-3d', () => { maplibreMap.getCanvas().style.cursor = ''; });
-      }
-
-      mlBuildingsLoaded = true;
-      document.getElementById('mlStatus').textContent =
-        'fill-extrusion 建筑 3D 已加载 | 12 栋北京地标';
-    } catch(e) {
-      console.error('Building layer add failed:', e);
-      document.getElementById('mlStatus').textContent =
-        '⚠ addLayer 失败: ' + e.message.substring(0,30);
+      maplibreMap.on('mouseenter', 'buildings-3d', () => { maplibreMap.getCanvas().style.cursor = 'pointer'; });
+      maplibreMap.on('mouseleave', 'buildings-3d', () => { maplibreMap.getCanvas().style.cursor = ''; });
     }
-  });
+
+    mlBuildingsLoaded = true;
+    document.getElementById('mlStatus').textContent =
+      'Style JSON + data-driven POI (match) + fill-extrusion 建筑 3D';
+  } catch(e) {
+    console.error('Building layer error:', e);
+    document.getElementById('mlStatus').textContent =
+      '⚠ ' + e.message.substring(0,40);
+  }
 }
 
 // ----- Apply style by swapping entire style JSON -----
@@ -1211,9 +1184,7 @@ function applyMapLibreStyle(styleName) {
     }
 
     // Re-add building layers after style swap
-    ['buildings-3d','building-labels'].forEach(id => {
-      if (maplibreMap.getLayer(id)) maplibreMap.removeLayer(id);
-    });
+    if (maplibreMap.getLayer('buildings-3d')) maplibreMap.removeLayer('buildings-3d');
     if (maplibreMap.getSource('beijing-buildings')) maplibreMap.removeSource('beijing-buildings');
     mlBuildingsLoaded = false;
     buildBuildingsLayer();
@@ -1233,11 +1204,9 @@ function applyMapLibreStyle(styleName) {
 // ----- Toggle 3D buildings -----
 function toggleBuildings(visible) {
   if (!maplibreMap) return;
-  ['buildings-3d', 'building-labels'].forEach(id => {
-    if (maplibreMap.getLayer(id)) {
-      maplibreMap.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
-    }
-  });
+  if (maplibreMap.getLayer('buildings-3d')) {
+    maplibreMap.setLayoutProperty('buildings-3d', 'visibility', visible ? 'visible' : 'none');
+  }
   document.getElementById('mlStatus').textContent =
     `样式: ${mlCurrentStyle} | 建筑 3D: ${visible ? 'ON (fill-extrusion)' : 'OFF'}`;
 }
