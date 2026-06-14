@@ -1,0 +1,25 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3965,39.9050],[116.3985,39.9050],[116.3985,39.9035],[116.3965,39.9035],[116.3965,39.9050]]]},"properties":{"name":"天安门城楼","height":34,"levels":5,"type":"landmark"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3970,39.9175],[116.3985,39.9180],[116.3990,39.9165],[116.3975,39.9160],[116.3970,39.9175]]]},"properties":{"name":"故宫太和殿","height":35,"levels":3,"type":"landmark"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3960,39.9185],[116.3970,39.9190],[116.3975,39.9175],[116.3965,39.9170],[116.3960,39.9185]]]},"properties":{"name":"故宫中和殿","height":27,"levels":2,"type":"landmark"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3955,39.9195],[116.3965,39.9200],[116.3970,39.9185],[116.3960,39.9180],[116.3955,39.9195]]]},"properties":{"name":"故宫保和殿","height":29,"levels":2,"type":"landmark"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4055,39.8830],[116.4075,39.8830],[116.4075,39.8815],[116.4055,39.8815],[116.4055,39.8830]]]},"properties":{"name":"天坛祈年殿","height":38,"levels":3,"type":"landmark"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4590,39.9095],[116.4615,39.9100],[116.4620,39.9080],[116.4600,39.9075],[116.4590,39.9095]]]},"properties":{"name":"国贸三期A座","height":330,"levels":74,"type":"skyscraper"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4610,39.9080],[116.4630,39.9085],[116.4635,39.9070],[116.4615,39.9065],[116.4610,39.9080]]]},"properties":{"name":"国贸三期B座","height":280,"levels":63,"type":"skyscraper"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4620,39.9105],[116.4640,39.9110],[116.4645,39.9090],[116.4625,39.9085],[116.4620,39.9105]]]},"properties":{"name":"中国尊（中信大厦）","height":528,"levels":108,"type":"skyscraper"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3830,39.9225],[116.3850,39.9230],[116.3860,39.9210],[116.3840,39.9205],[116.3830,39.9225]]]},"properties":{"name":"西单大悦城","height":60,"levels":12,"type":"commercial"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4555,39.9330],[116.4575,39.9330],[116.4575,39.9315],[116.4555,39.9315],[116.4555,39.9330]]]},"properties":{"name":"三里屯太古里南区","height":25,"levels":5,"type":"commercial"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3900,39.9040],[116.3930,39.9045],[116.3935,39.9025],[116.3905,39.9020],[116.3900,39.9040]]]},"properties":{"name":"国家大剧院","height":46,"levels":3,"type":"landmark"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3890,39.9925],[116.3920,39.9930],[116.3925,39.9905],[116.3895,39.9900],[116.3890,39.9925]]]},"properties":{"name":"国家体育场(鸟巢)","height":69,"levels":7,"type":"landmark"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3830,39.9920],[116.3855,39.9925],[116.3860,39.9905],[116.3835,39.9900],[116.3830,39.9920]]]},"properties":{"name":"国家游泳中心(水立方)","height":31,"levels":4,"type":"landmark"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3250,40.0010],[116.3285,40.0015],[116.3290,39.9985],[116.3255,39.9980],[116.3250,40.0010]]]},"properties":{"name":"清华大学主楼","height":45,"levels":10,"type":"education"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3040,39.9975],[116.3070,39.9980],[116.3075,39.9955],[116.3045,39.9950],[116.3040,39.9975]]]},"properties":{"name":"北京大学图书馆","height":30,"levels":6,"type":"education"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4930,39.9850],[116.4960,39.9855],[116.4970,39.9830],[116.4940,39.9825],[116.4930,39.9850]]]},"properties":{"name":"798艺术区主展厅","height":15,"levels":2,"type":"culture"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4580,39.9070],[116.4605,39.9075],[116.4610,39.9055],[116.4585,39.9050],[116.4580,39.9070]]]},"properties":{"name":"银泰中心","height":250,"levels":63,"type":"skyscraper"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4190,39.9160],[116.4215,39.9165],[116.4220,39.9145],[116.4195,39.9140],[116.4190,39.9160]]]},"properties":{"name":"王府井百货大楼","height":40,"levels":9,"type":"commercial"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.4780,39.9960],[116.4805,39.9965],[116.4810,39.9945],[116.4785,39.9940],[116.4780,39.9960]]]},"properties":{"name":"望京SOHO","height":200,"levels":45,"type":"skyscraper"}},
+    {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[116.3910,39.9055],[116.3925,39.9060],[116.3930,39.9045],[116.3915,39.9040],[116.3910,39.9055]]]},"properties":{"name":"中国国家博物馆","height":42,"levels":5,"type":"culture"}}
+  ]
+}

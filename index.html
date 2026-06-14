@@ -229,10 +229,16 @@ body {
 
     <div class="building-toggle" id="buildingToggle" style="margin-bottom:8px">
       <input type="checkbox" id="chkBuildings" checked>
-      <label for="chkBuildings">🏢 建筑 3D 拉伸 (fill-extrusion)</label>
+      <label for="chkBuildings">🏢 建筑 3D 拉伸 (fill-extrusion · 20栋地标)</label>
     </div>
 
-    <div style="font-size:0.65rem;color:#555;margin-top:2px" id="mlStatus">已加载矢量瓦片底图</div>
+    <div style="font-size:0.6rem;color:#555;margin-bottom:6px">
+      <span style="background:#607d8b;display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:4px"></span>摩天楼
+      <span style="background:#8d6e63;display:inline-block;width:8px;height:8px;border-radius:1px;margin-left:6px;margin-right:4px"></span>地标
+      <span style="background:#f48fb1;display:inline-block;width:8px;height:8px;border-radius:1px;margin-left:6px;margin-right:4px"></span>商业
+    </div>
+
+    <div style="font-size:0.65rem;color:#555;margin-top:2px" id="mlStatus">正在加载…</div>
     <div id="clusterLegend" style="margin-top:8px;font-size:0.65rem;color:#888"></div>
   </div>
 
@@ -1096,6 +1102,89 @@ function buildPOIGeoJSON() {
   mlPoisLoaded = true;
 }
 
+// ----- Build fill-extrusion layer from building GeoJSON (Lecture 11) -----
+let mlBuildingsLoaded = false;
+
+function buildBuildingsLayer() {
+  fetch('data/beijing-buildings.geojson')
+    .then(r => r.json())
+    .then(geojson => {
+      if (maplibreMap.getSource('beijing-buildings')) {
+        maplibreMap.getSource('beijing-buildings').setData(geojson);
+      } else {
+        maplibreMap.addSource('beijing-buildings', {
+          type: 'geojson',
+          data: geojson
+        });
+      }
+
+      if (!maplibreMap.getLayer('buildings-3d')) {
+        maplibreMap.addLayer({
+          id: 'buildings-3d',
+          type: 'fill-extrusion',
+          source: 'beijing-buildings',
+          paint: {
+            'fill-extrusion-height': ['get', 'height'],
+            'fill-extrusion-base': 0,
+            'fill-extrusion-opacity': 0.8,
+            'fill-extrusion-color': [
+              'match', ['get', 'type'],
+              'skyscraper', '#607d8b',
+              'landmark', '#8d6e63',
+              'commercial', '#f48fb1',
+              'education', '#80cbc4',
+              'culture', '#ce93d8',
+              '#bdbdbd'
+            ]
+          }
+        });
+
+        // Building labels
+        maplibreMap.addLayer({
+          id: 'building-labels',
+          type: 'symbol',
+          source: 'beijing-buildings',
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-font': ['Open Sans Bold'],
+            'text-size': 10,
+            'text-anchor': 'top',
+            'text-offset': [0, -0.5]
+          },
+          paint: { 'text-color': '#333', 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
+        });
+
+        // Building click popup
+        const bldgPopup = new maplibregl.Popup({ offset: [0, -20], closeButton: true, maxWidth: '240px' });
+        maplibreMap.on('click', 'buildings-3d', (e) => {
+          const p = e.features[0].properties;
+          bldgPopup.setLngLat(e.lngLat).setHTML(`
+            <div style="font-family:sans-serif;min-width:160px">
+              <h4 style="margin:0 0 4px;color:#455a64">${p.name}</h4>
+              <table style="font-size:0.78rem;line-height:1.6">
+                <tr><td style="color:#888">高度</td><td><b>${p.height}m</b></td></tr>
+                <tr><td style="color:#888">楼层</td><td><b>${p.levels}层</b></td></tr>
+                <tr><td style="color:#888">类型</td><td><b>${p.type}</b></td></tr>
+              </table>
+            </div>
+          `).addTo(maplibreMap);
+        });
+
+        maplibreMap.on('mouseenter', 'buildings-3d', () => { maplibreMap.getCanvas().style.cursor = 'pointer'; });
+        maplibreMap.on('mouseleave', 'buildings-3d', () => { maplibreMap.getCanvas().style.cursor = ''; });
+      }
+
+      mlBuildingsLoaded = true;
+      document.getElementById('mlStatus').textContent =
+        'fill-extrusion 建筑 3D 已加载 | 20 栋北京地标建筑';
+    })
+    .catch(err => {
+      console.error('Building data load failed:', err);
+      document.getElementById('mlStatus').textContent =
+        '⚠ 建筑数据加载失败，fill-extrusion 不可用';
+    });
+}
+
 // ----- Apply style by swapping entire style JSON -----
 function applyMapLibreStyle(styleName) {
   if (!maplibreMap || !maplibreInitialized) return;
@@ -1107,7 +1196,6 @@ function applyMapLibreStyle(styleName) {
   maplibreMap.once('style.load', () => {
     // Re-add POI layers after style swap
     if (allPois.length) {
-      // Remove old POI layers if they were on previous style
       ['poi-circles','poi-clusters','poi-cluster-count'].forEach(id => {
         if (maplibreMap.getLayer(id)) maplibreMap.removeLayer(id);
       });
@@ -1115,6 +1203,14 @@ function applyMapLibreStyle(styleName) {
       mlPoisLoaded = false;
       buildPOIGeoJSON();
     }
+
+    // Re-add building layers after style swap
+    ['buildings-3d','building-labels'].forEach(id => {
+      if (maplibreMap.getLayer(id)) maplibreMap.removeLayer(id);
+    });
+    if (maplibreMap.getSource('beijing-buildings')) maplibreMap.removeSource('beijing-buildings');
+    mlBuildingsLoaded = false;
+    buildBuildingsLayer();
 
     // Update fog color
     if (styleName === 'dark') {
@@ -1128,10 +1224,17 @@ function applyMapLibreStyle(styleName) {
     `样式: ${styleName} | 天地图栅格底图 | 数据驱动 POI`;
 }
 
-// ----- Toggle 3D buildings (placeholder — needs vector tiles, blocked in China) -----
+// ----- Toggle 3D buildings -----
 function toggleBuildings(visible) {
+  if (!maplibreMap) return;
+  ['buildings-3d', 'building-labels'].forEach(id => {
+    if (maplibreMap.getLayer(id)) {
+      maplibreMap.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    }
+  });
   document.getElementById('mlStatus').textContent =
-    `样式: ${mlCurrentStyle} | ⚠ 建筑 3D 需要矢量瓦片（国内不可用）`;}
+    `样式: ${mlCurrentStyle} | 建筑 3D: ${visible ? 'ON (fill-extrusion)' : 'OFF'}`;
+}
 
 // ----- Main init: Tianditu raster basemap + POI overlay -----
 function initMapLibre() {
@@ -1144,7 +1247,7 @@ function initMapLibre() {
     style: style,
     center: ML_MAP_CENTER,
     zoom: ML_MAP_ZOOM,
-    pitch: 0,
+    pitch: 60,
     bearing: 0,
     antialias: true
   });
@@ -1153,8 +1256,13 @@ function initMapLibre() {
   maplibreMap.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
   maplibreMap.on('style.load', () => {
+    // Load POI data layers (GeoJSON source, match expression, clustering)
     if (allPois.length) buildPOIGeoJSON();
 
+    // Load building fill-extrusion
+    buildBuildingsLayer();
+
+    // Coordinate tracking
     maplibreMap.on('mousemove', (e) => {
       document.getElementById('coordLng').textContent = e.lngLat.lng.toFixed(6);
       document.getElementById('coordLat').textContent = e.lngLat.lat.toFixed(6);
@@ -1162,7 +1270,7 @@ function initMapLibre() {
 
     maplibreInitialized = true;
     document.getElementById('mlStatus').textContent =
-      '样式: vec | 天地图矢量底图 | 数据驱动 POI + 聚类';
+      'Style JSON 矢量风格 | 数据驱动 POI (match) + fill-extrusion 建筑';
   });
 
   // Error logging
