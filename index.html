@@ -931,51 +931,20 @@ let mlPoisLoaded = false;
 const ML_MAP_CENTER = [MAP_CENTER[1], MAP_CENTER[0]];
 const ML_MAP_ZOOM   = MAP_ZOOM - 0.5;
 
-// ----- Tianditu raster tile URLs (MapLibre-compatible: array of hardcoded subdomains) -----
-// NOTE: MapLibre does not support Leaflet's {s} subdomain placeholder.
-// We provide an array of URLs with explicit t0..t7 subdomains instead.
-function tiandituVecURLs() {
-  return ['0','1','2','3','4','5','6','7'].map(s =>
-    `https://t${s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
-  );
-}
-function tiandituCvaURLs() {
-  return ['0','1','2','3','4','5','6','7'].map(s =>
-    `https://t${s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
-  );
-}
-function tiandituImgURLs() {
-  return ['0','1','2','3','4','5','6','7'].map(s =>
-    `https://t${s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
-  );
-}
-function tiandituCiaURLs() {
-  return ['0','1','2','3','4','5','6','7'].map(s =>
-    `https://t${s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`
-  );
-}
-
-// ----- Build style JSON (Tianditu raster base + optional vector overlay) -----
+// ----- Build style JSON (Tianditu WMTS raster base) -----
 function buildStyleJSON() {
+  const vecUrl  = `https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`;
+  const cvaUrl  = `https://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`;
+
   return {
     version: 8,
     name: 'beijing-tianditu',
     sources: {
-      'tianditu-base': {
-        type: 'raster',
-        tiles: tiandituVecURLs(),
-        tileSize: 256,
-        maxzoom: 18,
-        attribution: '&copy; 天地图'
-      },
-      'tianditu-label': {
-        type: 'raster',
-        tiles: tiandituCvaURLs(),
-        tileSize: 256,
-        maxzoom: 18
-      }
+      'tianditu-base': { type: 'raster', tiles: [vecUrl], tileSize: 256, maxzoom: 18 },
+      'tianditu-label': { type: 'raster', tiles: [cvaUrl], tileSize: 256, maxzoom: 18 }
     },
     layers: [
+      { id: 'background', type: 'background', paint: { 'background-color': '#f5f0e8' } },
       { id: 'tdt-base', type: 'raster', source: 'tianditu-base' },
       { id: 'tdt-label', type: 'raster', source: 'tianditu-label' }
     ]
@@ -983,24 +952,17 @@ function buildStyleJSON() {
 }
 
 // Build satellite style
-function buildSatelliteStyleJSON() {
+function buildSatelliteJSON() {
+  const imgUrl = `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`;
+  const ciaUrl = `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`;
   return {
-    version: 8,
-    name: 'beijing-tianditu-sat',
+    version: 8, name: 'beijing-tianditu-sat',
     sources: {
-      'tianditu-img': {
-        type: 'raster',
-        tiles: tiandituImgURLs(),
-        tileSize: 256, maxzoom: 18,
-        attribution: '&copy; 天地图'
-      },
-      'tianditu-cia': {
-        type: 'raster',
-        tiles: tiandituCiaURLs(),
-        tileSize: 256, maxzoom: 18
-      }
+      'tianditu-img': { type: 'raster', tiles: [imgUrl], tileSize: 256, maxzoom: 18 },
+      'tianditu-cia': { type: 'raster', tiles: [ciaUrl], tileSize: 256, maxzoom: 18 }
     },
     layers: [
+      { id: 'background-sat', type: 'background', paint: { 'background-color': '#1a2a1a' } },
       { id: 'tdt-img', type: 'raster', source: 'tianditu-img' },
       { id: 'tdt-cia', type: 'raster', source: 'tianditu-cia' }
     ]
@@ -1123,66 +1085,52 @@ function buildPOIGeoJSON() {
   mlPoisLoaded = true;
 }
 
-// ----- Apply style by swapping raster source -----
+// ----- Apply style by swapping entire style JSON -----
 function applyMapLibreStyle(styleName) {
   if (!maplibreMap || !maplibreInitialized) return;
   mlCurrentStyle = styleName;
 
-  if (styleName === 'satellite') {
-    // Switch to satellite basemap
-    if (!maplibreMap.getSource('tianditu-img')) {
-      maplibreMap.addSource('tianditu-img', {
-        type: 'raster', tiles: tiandituImgURLs(), tileSize: 256, maxzoom: 18
-      });
-      maplibreMap.addSource('tianditu-cia', {
-        type: 'raster', tiles: tiandituCiaURLs(), tileSize: 256, maxzoom: 18
-      });
-      maplibreMap.addLayer({ id: 'tdt-img', type: 'raster', source: 'tianditu-img' }, 'tdt-label');
-      maplibreMap.addLayer({ id: 'tdt-cia', type: 'raster', source: 'tianditu-cia' });
-    }
-    // Hide vector basemap layers
-    ['tdt-base','tdt-label'].forEach(id => {
-      if (maplibreMap.getLayer(id)) maplibreMap.setLayoutProperty(id, 'visibility', 'none');
-    });
-    ['tdt-img','tdt-cia'].forEach(id => {
-      if (maplibreMap.getLayer(id)) maplibreMap.setLayoutProperty(id, 'visibility', 'visible');
-    });
-  } else {
-    // Vec or dark — use vector base (dark = vector base, it's the same tiles)
-    // Show vec layers
-    ['tdt-base','tdt-label'].forEach(id => {
-      if (maplibreMap.getLayer(id)) maplibreMap.setLayoutProperty(id, 'visibility', 'visible');
-    });
-    ['tdt-img','tdt-cia'].forEach(id => {
-      if (maplibreMap.getLayer(id)) maplibreMap.setLayoutProperty(id, 'visibility', 'none');
-    });
-  }
+  const newStyle = styleName === 'satellite' ? buildSatelliteJSON() : buildStyleJSON();
 
-  // Update fog color based on style
-  if (styleName === 'dark') {
-    maplibreMap.setFog({ 'range': [0.5, 3], 'color': '#1a1a2e', 'high-color': '#3a3a5e', 'space-color': '#0a0a1e', 'horizon-blend': 0.12 });
-  } else {
-    maplibreMap.setFog({ 'range': [0.5, 3], 'color': '#e8f0f5', 'high-color': '#a8c8e0', 'space-color': '#1a1a2e', 'horizon-blend': 0.1 });
-  }
+  maplibreMap.setStyle(newStyle, { diff: false });
+  maplibreMap.once('style.load', () => {
+    // Re-add POI layers after style swap
+    if (allPois.length) {
+      // Remove old POI layers if they were on previous style
+      ['poi-circles','poi-clusters','poi-cluster-count'].forEach(id => {
+        if (maplibreMap.getLayer(id)) maplibreMap.removeLayer(id);
+      });
+      if (maplibreMap.getSource('beijing-pois')) maplibreMap.removeSource('beijing-pois');
+      mlPoisLoaded = false;
+      buildPOIGeoJSON();
+    }
+
+    // Update fog color
+    if (styleName === 'dark') {
+      maplibreMap.setFog({ 'range': [0.5, 3], 'color': '#1a1a2e', 'high-color': '#3a3a5e', 'space-color': '#0a0a1e', 'horizon-blend': 0.12 });
+    } else {
+      maplibreMap.setFog({ 'range': [0.5, 3], 'color': '#e8f0f5', 'high-color': '#a8c8e0', 'space-color': '#1a1a2e', 'horizon-blend': 0.1 });
+    }
+  });
 
   document.getElementById('mlStatus').textContent =
-    `样式: ${styleName} | 天地图栅格底图 | 数据驱动 POI + 聚类`;
+    `样式: ${styleName} | 天地图栅格底图 | 数据驱动 POI`;
 }
 
-// ----- Toggle 3D buildings (placeholder — requires vector tiles) -----
+// ----- Toggle 3D buildings (placeholder — needs vector tiles, blocked in China) -----
 function toggleBuildings(visible) {
-  // 3D buildings require OSM vector tiles which are blocked in China.
-  // When available, fill-extrusion layers would be added here.
   document.getElementById('mlStatus').textContent =
-    `样式: ${mlCurrentStyle} | ⚠ 建筑 3D 需要矢量瓦片（当前不可用）`;}
+    `样式: ${mlCurrentStyle} | ⚠ 建筑 3D 需要矢量瓦片（国内不可用）`;}
 
 // ----- Main init: Tianditu raster basemap + POI overlay -----
 function initMapLibre() {
   if (maplibreInitialized) return;
 
+  const style = buildStyleJSON();
+
   maplibreMap = new maplibregl.Map({
     container: 'maplibre-map',
-    style: buildStyleJSON(),       // Tianditu Vec + Cva annotation
+    style: style,
     center: ML_MAP_CENTER,
     zoom: ML_MAP_ZOOM,
     pitch: 0,
@@ -1194,10 +1142,8 @@ function initMapLibre() {
   maplibreMap.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
   maplibreMap.on('style.load', () => {
-    // Add POI data layers on top of Tianditu raster
     if (allPois.length) buildPOIGeoJSON();
 
-    // Coordinate tracking
     maplibreMap.on('mousemove', (e) => {
       document.getElementById('coordLng').textContent = e.lngLat.lng.toFixed(6);
       document.getElementById('coordLat').textContent = e.lngLat.lat.toFixed(6);
@@ -1208,7 +1154,14 @@ function initMapLibre() {
       '样式: vec | 天地图矢量底图 | 数据驱动 POI + 聚类';
   });
 
-  // Style swatch events
+  // Error logging
+  maplibreMap.on('error', (e) => {
+    console.warn('MapLibre error:', e.error ? e.error.message : e);
+    document.getElementById('mlStatus').textContent =
+      '样式: vec | ⚠ 地图加载错误，请查看控制台';
+  });
+
+  // Style swatch events (only bind once)
   document.querySelectorAll('.style-swatch').forEach(sw => {
     sw.addEventListener('click', () => {
       document.querySelectorAll('.style-swatch').forEach(s => s.classList.remove('active'));
@@ -1217,7 +1170,6 @@ function initMapLibre() {
     });
   });
 
-  // Building toggle (placeholder — needs OSM vector tiles, blocked in China)
   document.getElementById('chkBuildings').addEventListener('change', (e) => {
     toggleBuildings(e.target.checked);
   });
