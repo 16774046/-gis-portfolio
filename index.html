@@ -969,10 +969,16 @@ function buildStyleJSON(palette) {
     glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
     sprite: 'https://cdn.jsdelivr.net/gh/openmaptiles/osm-liberty@gh-pages/sprites/osm-liberty',
     sources: {
+      'osm-raster': {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256, maxzoom: 19,
+        attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+      },
       'osm-vector': {
         type: 'vector',
         tiles: [VT_URL],
-        maxzoom: 14, attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
+        maxzoom: 14
       },
       'terrain-dem': {
         type: 'raster-dem',
@@ -988,6 +994,7 @@ function buildStyleJSON(palette) {
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': palette.land } },
+      { id: 'osm-raster-bg', type: 'raster', source: 'osm-raster' },
       { id: 'landuse-residential', type: 'fill', source: 'osm-vector', 'source-layer': 'landuse',
         filter: ['==', ['get','class'], 'residential'],
         paint: { 'fill-color': palette.landuse, 'fill-opacity': 0.6 }
@@ -1215,14 +1222,12 @@ function applyMapLibreStyle(styleName) {
 function toggleBuildings(visible) {
   if (!maplibreMap) return;
   const layerId = 'buildings-3d';
-  if (visible && !maplibreMap.getLayer(layerId)) {
-    // Need to re-add — but we start with it, so just visibility
-  }
   if (maplibreMap.getLayer(layerId)) {
     maplibreMap.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
   }
+  // If layer doesn't exist (vector source failed), silently skip
   document.getElementById('mlStatus').textContent =
-    `样式: ${mlCurrentStyle} | 建筑 3D: ${visible?'ON':'OFF'}`;
+    `样式: ${mlCurrentStyle} | 建筑 3D: ${visible?'ON':'OFF'}${!maplibreMap.getLayer(layerId)?' (矢量图层未加载)':''}`;
 }
 
 // ----- Main init -----
@@ -1246,8 +1251,11 @@ function initMapLibre() {
   maplibreMap.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
   maplibreMap.on('style.load', () => {
-    // Terrain from DEM
-    maplibreMap.setTerrain({ source: 'terrain-dem', exaggeration: 1.5 });
+    // Terrain from DEM (may be blocked in China — safe to ignore)
+    try {
+      maplibreMap.setTerrain({ source: 'terrain-dem', exaggeration: 1.5 });
+    } catch(e) { console.warn('Terrain source unavailable:', e); }
+
     maplibreMap.setFog({
       'range': [0.5, 3],
       'color': '#e8f0f5',
@@ -1267,7 +1275,16 @@ function initMapLibre() {
 
     maplibreInitialized = true;
     document.getElementById('mlStatus').textContent =
-      '样式: streets | 矢量瓦片 + fill-extrusion 建筑 | 数据驱动 POI';
+      '样式: streets | OSM 栅格底图 + 矢量叠加层 | 数据驱动 POI';
+  });
+
+  // Handle vector tile load errors (common in China due to network restrictions)
+  maplibreMap.on('error', (e) => {
+    if (e.source && e.source.type === 'vector') {
+      console.warn('Vector tile source unavailable, using raster fallback:', e.error.message);
+      document.getElementById('mlStatus').textContent =
+        '样式: streets | ⚠ 矢量瓦片不可用，使用 OSM 栅格底图 | 数据驱动 POI';
+    }
   });
 
   // Style swatch click events
