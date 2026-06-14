@@ -24,6 +24,9 @@
 | 3D 地形视图 | 综合拓展 | MapLibre GL JS 渲染全球地形，Pitch/Roll 三维视角，大气雾效 |
 | POI 分类筛选 | 综合拓展 | 按类别独立开关过滤 POI 显示 |
 | 分层图例 | 综合拓展 | 颜色编码的类别图例说明 |
+| 分级设色图 (Choropleth) | 第 10 讲练习 1 | 16 区人口密度 6 级 YlOrRd 顺序色带，`style` 回调 + `onEachFeature` Popup/Tooltip/高亮 |
+| 比例符号图 (Proportional Symbols) | 第 10 讲练习 2 | GDP 映射圆形半径（√ 变换），`pointToLayer` + `filter` 过滤 + 图例 |
+| 专题图切换 | 综合拓展 | 侧边栏 Tab + 右上角 Layer Control 双层控制 |
 
 ---
 
@@ -83,6 +86,40 @@ Layer Control
 
 ## 四、核心实现
 
+### 4.0 分层设色图配色方案
+
+**采用 YlOrRd (Yellow-Orange-Red) 6 级顺序色带：**
+
+```
+密度 (人/km²)    颜色        色值
+─────────────────────────────────
+   0 –   300   浅黄        #ffffb2
+ 300 – 1,000   淡黄        #fed976
+1000 – 3,000   浅橙        #feb24c
+3000 – 8,000   中橙        #fd8d3c
+8000 –15,000   深橙红      #f03b20
+15000–25,000   暗红        #bd0026
+   > 25,000   深暗红      #800026
+```
+
+**选择依据（顺序色带 vs 发散色带 vs 定性色带）：**
+
+| 色带类型 | 适用场景 | 本例是否适用 |
+|---------|---------|:----------:|
+| **顺序 (Sequential)** | 数值从低到高连续变化，如密度、比率、计数 | ✅ 选中 |
+| 发散 (Diverging) | 数值有双向偏离中心值，如±变化率、收支差 | ✗ 无负值/无临界中点 |
+| 定性 (Qualitative) | 分类数据，无大小顺序，如土地类型 | ✗ 密度有明确的低-高顺序 |
+
+**具体理由：**
+1. 人口密度是**单向递增**的连续变量（300 → 25,000+ 人/km²），不存在"零中点"或"正向/负向"分化的语义结构，因此排除发散色带。
+2. **单一色相渐变**（黄→橙→红）比多色相渐变更能保持读者对"低→高"的**感知保序性**——颜色越深越"重"，直觉对应更高密度。
+3. YlOrRd 在 ColorBrewer 中为 colorblind-safe 的 6 级方案，可读性经过验证。
+4. 跨类别数据（如城区 vs 郊区类型）更适合定性色带，但本图映射的是连续统计值，不适用。
+
+**分级方法：** 手动设定 7 档断点（基于 Jenks Natural Breaks 近似），使类内差异最小化、类间差异最大化。考虑到北京城区/郊区密度极端分化（东城 >20,000 vs 延庆 <200），未采用等间距分级，避免低密度区域全挤在浅色带无法区分。
+
+---
+
 ### 4.1 自定义 POI 图标（DivIcon）
 
 ```javascript
@@ -140,6 +177,64 @@ maplibreMap.jumpTo({
 
 使用 AWS Terrarium 全球 DEM 瓦片作为高程数据源，结合 MapLibre 的天空盒与大气雾效渲染真实 3D 地形场景。
 
+### 4.6 分级设色图（Choropleth）
+
+**`getColor` 分级函数：**
+```javascript
+function getColor(density) {
+  return density > 25000 ? '#800026' :
+         density > 15000 ? '#bd0026' :
+         density > 8000  ? '#f03b20' :
+         density > 3000  ? '#fd8d3c' :
+         density > 1000  ? '#feb24c' :
+         density > 300   ? '#fed976' :
+                            '#ffffb2';
+}
+```
+
+**`style` 回调 + `onEachFeature` 交互：**
+```javascript
+L.geoJSON(allDistricts, {
+  style: choroplethStyle,           // 按密度返回 fillColor
+  onEachFeature: onEachDistrict     // bindPopup + bindTooltip + hover 高亮
+}).addTo(choroplethLayer);
+```
+
+每个区的 `onEachFeature` 绑定 3 种交互：
+- **Sticky Tooltip** — 鼠标悬浮显示区名 + 密度值
+- **Popup** — 点击弹窗显示人口/面积/密度/GDP 完整表格
+- **hover 高亮** — 白色边框加粗 + `bringToFront()` 避免被邻近区遮挡
+
+### 4.7 比例符号图（Proportional Symbols）
+
+**`pointToLayer` 回调 — 圆形半径映射 GDP：**
+```javascript
+function getRadius(gdp) {
+  return Math.sqrt(gdp) * 0.85;  // √ 变换补偿面积错觉
+}
+function pointToLayer(feature, latlng) {
+  return L.circleMarker(latlng, {
+    radius: getRadius(feature.properties.gdp),
+    fillColor: '#e94560', fillOpacity: 0.65
+  });
+}
+```
+
+**`filter` 过滤：**
+```javascript
+function propSymbolFilter(feature) {
+  return feature.properties.gdp > 0; // 所有区通过
+}
+```
+
+**比例尺度选择的数学依据：** 直接线性映射半径（r ∝ GDP）会导致读者按圆面积比较数值，产生平方级面积错觉（GDP 大 4 倍的区看起来大 16 倍）。采用 `r ∝ √GDP` 使面积正比于 GDP，符合 Weber-Fechner 视觉感知规律。
+
+### 4.8 专题图切换机制
+
+两层控制互不冲突：
+- **侧边栏 Tab**（分级设色 / 比例符号 / 关闭）— 控制当前显示哪个专题图层
+- **右上角 Layer Control** — 勾选/取消专题图层（与底图切换共用菜单）
+
 ---
 
 ## 五、数据说明
@@ -149,6 +244,31 @@ maplibreMap.jumpTo({
 | 文件 | 格式 | 记录数 | 字段 |
 |------|------|--------|------|
 | `data/beijing-pois.geojson` | GeoJSON FeatureCollection | 20 | name, category, address, description, rating, hours |
+
+### 5.2 行政区划数据
+
+| 文件 | 格式 | 记录数 | 字段 |
+|------|------|--------|------|
+| `data/beijing-districts.geojson` | GeoJSON FeatureCollection | 16 | name, pop (万人), area (km²), gdp (亿元) |
+
+| 区名 | 人口(万) | 面积(km²) | 人口密度(人/km²) | GDP(亿元) |
+|------|:-------:|:-------:|:---------------:|:--------:|
+| 东城区 | 70.4 | 41.84 | 16,830 | 3,386 |
+| 西城区 | 110.0 | 50.70 | 21,697 | 5,011 |
+| 朝阳区 | 345.0 | 470.8 | 7,329 | 8,396 |
+| 海淀区 | 313.0 | 430.8 | 7,265 | 10,207 |
+| 丰台区 | 202.0 | 305.8 | 6,606 | 2,187 |
+| 通州区 | 184.0 | 906.3 | 2,030 | 1,302 |
+| 大兴区 | 199.0 | 1036.3 | 1,920 | 1,472 |
+| 昌平区 | 228.0 | 1343.5 | 1,697 | 1,402 |
+| 顺义区 | 133.0 | 1021.0 | 1,303 | 2,193 |
+| 房山区 | 119.0 | 1989.5 | 598 | 873 |
+| 石景山区 | 56.8 | 84.38 | 6,733 | 971 |
+| 门头沟区 | 35.3 | 1450.7 | 243 | 277 |
+| 怀柔区 | 41.0 | 2128.7 | 193 | 463 |
+| 密云区 | 52.0 | 2229.5 | 233 | 402 |
+| 平谷区 | 45.5 | 1075.0 | 423 | 354 |
+| 延庆区 | 35.6 | 1993.8 | 179 | 219 |
 
 ### 5.2 分类统计
 
@@ -230,10 +350,11 @@ MapLibre GL JS 需要 WebGL 支持。
 
 ```
 gis-portfolio/
-├── index.html                # 主页面（HTML + CSS + JS）
+├── index.html                    # 主页面（HTML + CSS + JS，1027 行）
 ├── data/
-│   └── beijing-pois.geojson  # 北京 POI 空间数据
-└── README.md                 # 实验报告（本文件）
+│   ├── beijing-pois.geojson      # 北京 20 个 POI 空间数据
+│   └── beijing-districts.geojson # 北京 16 区行政区划（含人口/面积/GDP）
+└── README.md                     # 实验报告（本文件）
 ```
 
 ---

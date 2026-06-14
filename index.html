@@ -141,6 +141,37 @@ body {
   display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   margin-right: 6px; vertical-align: middle;
 }
+
+/* ===== Thematic Map Toggles ===== */
+.thematic-tabs { display: flex; gap: 6px; }
+.thematic-tab {
+  flex: 1; padding: 8px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04); color: #999; cursor: pointer;
+  font-size: 0.7rem; font-weight: 600; transition: all 0.2s; text-align: center;
+}
+.thematic-tab.active { background: #e94560; border-color: #e94560; color: #fff; }
+.thematic-tab:hover:not(.active) { background: rgba(255,255,255,0.08); color: #ccc; }
+
+/* ===== Choropleth Legend ===== */
+.choro-legend { display: flex; flex-direction: column; gap: 2px; }
+.choro-row { display: flex; align-items: center; gap: 8px; }
+.choro-swatch { width: 24px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+.choro-label { font-size: 0.7rem; color: #aaa; }
+
+/* ===== Proportional Symbol Legend ===== */
+.prop-legend { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.prop-row { display: flex; align-items: center; gap: 10px; }
+.prop-circle {
+  border-radius: 50%; flex-shrink: 0;
+  background: rgba(233,69,96,0.6); border: 1.5px solid #e94560;
+}
+.prop-label { font-size: 0.7rem; color: #aaa; }
+
+/* ===== District info tooltip in choropleth ===== */
+.district-popup h4 { margin: 0 0 6px; font-size: 0.9rem; }
+.district-popup td { font-size: 0.78rem; padding: 1px 6px; }
+.district-popup td:first-child { color: #888; }
+.district-popup td:last-child { font-weight: 600; text-align: right; }
 </style>
 </head>
 <body>
@@ -197,7 +228,20 @@ body {
     </div>
   </div>
 
-  <!-- Legend -->
+  <!-- Thematic Map Controls (Lecture 10) -->
+  <div class="section">
+    <div class="section-title">📊 专题地图 · 第10讲</div>
+    <div class="thematic-tabs">
+      <button class="thematic-tab" data-theme="none" style="border-color:rgba(255,255,255,0.3);">🚫 关闭</button>
+      <button class="thematic-tab active" data-theme="choropleth">🎨 分级设色</button>
+      <button class="thematic-tab" data-theme="proportional">🔵 比例符号</button>
+    </div>
+    <div id="choroLegend" class="choro-legend" style="margin-top:10px"></div>
+    <div id="propLegend" class="prop-legend" style="margin-top:10px;display:none"></div>
+    <div style="font-size:0.65rem;color:#666;margin-top:6px;text-align:center" id="thematicHint">分级设色：人口密度 人/km²</div>
+  </div>
+
+  <!-- POI Legend -->
   <div class="section">
     <div class="section-title">📋 图例说明</div>
     <div class="legend">
@@ -342,14 +386,26 @@ const baseMaps = {
 // Default: OSM
 osmLayer.addTo(leafletMap);
 
+/* ---- Overlay Layer Groups (for layer control) ---- */
+const poiLayerGroup = L.layerGroup();           // POI markers
+const choroplethLayer = L.layerGroup();         // district choropleth
+const propSymbolLayer = L.layerGroup();         // district proportional symbols
+
+poiLayerGroup.addTo(leafletMap); // POI visible by default
+
+const overlayMaps = {
+  '分级设色 (人口密度)': choroplethLayer,
+  '比例符号 (GDP)': propSymbolLayer,
+  'POI 标注': poiLayerGroup
+};
+
 // Layer control
-L.control.layers(baseMaps, null, {
+L.control.layers(baseMaps, overlayMaps, {
   position: 'topright',
   collapsed: true
 }).addTo(leafletMap);
 
-/* ---- POI Layer Group ---- */
-const poiLayerGroup = L.layerGroup().addTo(leafletMap);
+/* ---- POI State ---- */
 let allPois = [];          // full GeoJSON features
 let markerMap = new Map(); // feature index -> marker
 let activeCats = new Set(['景点名胜', '交通枢纽', '餐饮美食', '购物商圈', '文化教育']);
@@ -436,6 +492,218 @@ document.querySelectorAll('.poi-filter-btn').forEach(btn => {
     renderPOIs();
   });
 });
+
+/* ============================================================
+   Thematic Map: Districts (Lecture 10)
+   ============================================================ */
+
+// ----- Shared: district centroid cache -----
+const districtCentroids = {};  // name -> [lat, lng]
+
+// ----- Choropleth: graduated color map (population density) -----
+// Sequential color scheme: YlOrRd (6-class)
+// Choice rationale: population density is a sequential variable (low->high),
+// so a single-hue sequential scheme preserves the perceptual ordering.
+function getColor(density) {
+  return density > 25000 ? '#800026' :
+         density > 15000 ? '#bd0026' :
+         density > 8000  ? '#f03b20' :
+         density > 3000  ? '#fd8d3c' :
+         density > 1000  ? '#feb24c' :
+         density > 300   ? '#fed976' :
+                            '#ffffb2';
+}
+
+function getDensity(feature) {
+  return feature.properties.pop * 10000 / feature.properties.area;
+}
+
+function choroplethStyle(feature) {
+  return {
+    fillColor: getColor(getDensity(feature)),
+    weight: 1.5,
+    color: '#555',
+    fillOpacity: 0.78
+  };
+}
+
+function highlightFeature(e) {
+  const layer = e.target;
+  layer.setStyle({ weight: 3, color: '#fff' });
+  layer.bringToFront();
+  if (!L.Browser.ie && !L.Browser.opera) layer.bringToFront();
+}
+
+function resetHighlight(e) {
+  choroplethGeoJSON && choroplethGeoJSON.resetStyle(e.target);
+}
+
+function onEachDistrict(feature, layer) {
+  const p = feature.properties;
+  const density = getDensity(feature);
+  const centroid = layer.getBounds().getCenter();
+  districtCentroids[p.name] = [centroid.lat, centroid.lng];
+
+  layer.bindPopup(
+    `<div class="district-popup">
+      <h4>${p.name}</h4>
+      <table>
+        <tr><td>人口</td><td>${p.pop} 万人</td></tr>
+        <tr><td>面积</td><td>${p.area} km²</td></tr>
+        <tr><td>人口密度</td><td>${Math.round(density)} 人/km²</td></tr>
+        <tr><td>GDP</td><td>${p.gdp} 亿元</td></tr>
+      </table>
+    </div>`,
+    { maxWidth: 240 }
+  );
+
+  layer.bindTooltip(`<b>${p.name}</b> — ${Math.round(density)} 人/km²`, {
+    sticky: true, direction: 'top', opacity: 0.9
+  });
+
+  layer.on({
+    mouseover: highlightFeature,
+    mouseout: resetHighlight
+  });
+}
+
+// ----- Proportional symbols: circle size by GDP -----
+// Square-root scale: avoids area-perception bias (Weber-Fechner law),
+// so readers compare value magnitudes rather than disc areas.
+function getRadius(gdp) {
+  return Math.sqrt(gdp) * 0.85;
+}
+
+function propSymbolFilter(feature) {
+  return feature.properties.gdp > 0; // all districts pass
+}
+
+function pointToLayer(feature, latlng) {
+  const gdp = feature.properties.gdp;
+  return L.circleMarker(latlng, {
+    radius: getRadius(gdp),
+    fillColor: '#e94560',
+    color: '#fff',
+    weight: 1.5,
+    fillOpacity: 0.65
+  });
+}
+
+function onEachPropSymbol(feature, layer) {
+  const p = feature.properties;
+  layer.bindPopup(
+    `<div class="district-popup">
+      <h4>${p.name}</h4>
+      <table>
+        <tr><td>GDP</td><td>${p.gdp} 亿元</td></tr>
+        <tr><td>人口</td><td>${p.pop} 万人</td></tr>
+      </table>
+    </div>`,
+    { maxWidth: 200 }
+  );
+  layer.bindTooltip(`<b>${p.name}</b> — ${p.gdp} 亿元`, {
+    sticky: true, direction: 'top'
+  });
+}
+
+// ----- Layer references -----
+let choroplethGeoJSON = null;
+let propSymbolGeoJSON = null;
+let currentTheme = 'choropleth'; // 'choropleth' | 'proportional' | 'none'
+
+// ----- Render choropleth legend -----
+function renderChoroLegend() {
+  const breaks = [300, 1000, 3000, 8000, 15000, 25000];
+  const colors = ['#ffffb2','#fed976','#feb24c','#fd8d3c','#f03b20','#bd0026','#800026'];
+  let html = '';
+  breaks.forEach((val, i) => {
+    const label = i < breaks.length - 1
+      ? `${val.toLocaleString()} – ${breaks[i+1].toLocaleString()}`
+      : `> ${breaks[i-1].toLocaleString()}`;
+    html += `<div class="choro-row">
+      <span class="choro-swatch" style="background:${colors[i]}"></span>
+      <span class="choro-label">${label}</span>
+    </div>`;
+  });
+  html += `<div class="choro-row">
+    <span class="choro-swatch" style="background:${colors[6]}"></span>
+    <span class="choro-label">&gt; 25,000</span>
+  </div>`;
+  document.getElementById('choroLegend').innerHTML = html;
+}
+
+// ----- Render proportional symbol legend -----
+function renderPropLegend() {
+  const gdps = [500, 2000, 5000, 10000];
+  let html = '';
+  gdps.forEach(g => {
+    const r = getRadius(g);
+    html += `<div class="prop-row">
+      <div class="prop-circle" style="width:${r*2}px;height:${r*2}px"></div>
+      <span class="prop-label">${g} 亿元</span>
+    </div>`;
+  });
+  document.getElementById('propLegend').innerHTML = html;
+}
+
+// ----- Show/hide thematic layers -----
+function setTheme(theme) {
+  currentTheme = theme;
+  choroplethLayer.clearLayers();
+  propSymbolLayer.clearLayers();
+  choroplethGeoJSON = null;
+  propSymbolGeoJSON = null;
+
+  document.getElementById('choroLegend').style.display = 'none';
+  document.getElementById('propLegend').style.display = 'none';
+
+  if (!allDistricts.length) return;
+
+  if (theme === 'choropleth') {
+    choroplethGeoJSON = L.geoJSON(allDistricts, {
+      style: choroplethStyle,
+      onEachFeature: onEachDistrict
+    }).addTo(choroplethLayer);
+    document.getElementById('choroLegend').style.display = '';
+    document.getElementById('thematicHint').textContent = '分级设色：人口密度 人/km²';
+  } else if (theme === 'proportional') {
+    propSymbolGeoJSON = L.geoJSON(allDistricts, {
+      filter: propSymbolFilter,
+      pointToLayer: pointToLayer,
+      onEachFeature: onEachPropSymbol
+    }).addTo(propSymbolLayer);
+    document.getElementById('propLegend').style.display = '';
+    document.getElementById('thematicHint').textContent = '比例符号：GDP 亿元';
+  } else {
+    document.getElementById('thematicHint').textContent = '专题图层已关闭';
+  }
+}
+
+// ----- Theme toggle buttons -----
+document.querySelectorAll('.thematic-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.thematic-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    setTheme(tab.dataset.theme);
+  });
+});
+
+// ----- Load districts GeoJSON -----
+let allDistricts = [];
+
+fetch('data/beijing-districts.geojson')
+  .then(r => r.json())
+  .then(geojson => {
+    allDistricts = geojson.features;
+    renderChoroLegend();
+    renderPropLegend();
+    setTheme('choropleth'); // default: show choropleth
+  })
+  .catch(err => {
+    console.error('Failed to load districts GeoJSON:', err);
+    document.getElementById('choroLegend').innerHTML =
+      '<span style="color:#e74c3c;font-size:0.7rem">⚠ 行政区数据加载失败</span>';
+  });
 
 /* ============================================================
    Bookmarks
