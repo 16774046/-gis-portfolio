@@ -27,6 +27,11 @@
 | 分级设色图 (Choropleth) | 第 10 讲练习 1 | 16 区人口密度 6 级 YlOrRd 顺序色带，`style` 回调 + `onEachFeature` Popup/Tooltip/高亮 |
 | 比例符号图 (Proportional Symbols) | 第 10 讲练习 2 | GDP 映射圆形半径（√ 变换），`pointToLayer` + `filter` 过滤 + 图例 |
 | 专题图切换 | 综合拓展 | 侧边栏 Tab + 右上角 Layer Control 双层控制 |
+| 矢量瓦片底图 | 第 11 讲练习 1 | MapLibre Style JSON 加载 OS​M 矢量瓦片，9 层自定义样式（water/landuse/roads/buildings/labels）|
+| 数据驱动样式 | 第 11 讲练习 1 | POI GeoJSON Source + 3 层（cluster circles / count labels / individual circles），`match` 表达式按 category 着色 |
+| 样式切换器 | 第 11 讲练习 2 | 3 套配色方案（街区/暗色/古风），运行时 `setPaintProperty` 切换 |
+| 点聚合可视化 | 第 11 讲挑战 1 | MapLibre 内置 `cluster:true`，4 级圆半径 + 计数标签，点击展开 |
+| 建筑 3D 拉伸 | 综合拓展 | `fill-extrusion` 图层，`coalesce(height, render_height, levels*3)` 提取高度，按高度渐变色 |
 
 ---
 
@@ -235,6 +240,122 @@ function propSymbolFilter(feature) {
 - **侧边栏 Tab**（分级设色 / 比例符号 / 关闭）— 控制当前显示哪个专题图层
 - **右上角 Layer Control** — 勾选/取消专题图层（与底图切换共用菜单）
 
+### 4.9 MapLibre 矢量瓦片底图（Style JSON）
+
+使用 OpenFreeMap 提供的免费 OSM 矢量瓦片 (`tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt`)，
+通过 MapLibre Style JSON 构建完整的自定义底图：
+
+```javascript
+sources: {
+  'osm-vector': {
+    type: 'vector',
+    tiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt'],
+    maxzoom: 14
+  }
+}
+```
+
+图层定义（9 层）：
+| 图层 ID | 类型 | 数据源层 | 说明 |
+|---------|------|---------|------|
+| background | background | — | 底色 |
+| landuse-residential | fill | landuse | 住宅用地 |
+| landuse-park | fill | landuse | 公园绿地 |
+| landuse-hospital | fill | landuse | 医院 |
+| landuse-school | fill | landuse | 学校 |
+| water | fill | water | 水域 |
+| water-outline | line | water | 水域边线 |
+| road-major | line | transportation | 主干道 |
+| road-minor | line | transportation | 支路 |
+| buildings-3d | fill-extrusion | building | 3D 建筑拉伸 |
+| place-labels | symbol | place | 地名标注 |
+| road-labels | symbol | transportation_name | 道路名标注 |
+
+### 4.10 GeoJSON Source/Layer + 数据驱动样式
+
+POI 数据通过 `maplibreMap.addSource('beijing-pois', { type:'geojson', data: fc })` 注入。
+
+**3 层渲染架构：**
+```
+beijing-pois (GeoJSON Source)
+├── poi-clusters        → type:circle   | filter: [has, point_count]
+├── poi-cluster-count   → type:symbol   | 聚类计数文本
+└── poi-circles         → type:circle   | filter: [!,[has, point_count]]
+                                          paint.circle-color:
+                                            match(['get','category'],
+                                              '景点名胜','#e67e22',
+                                              '交通枢纽','#3498db', ...)
+```
+
+**数据驱动样式（`match` 表达式）：**
+```javascript
+'circle-color': [
+  'match', ['get','category'],
+  '景点名胜', '#e67e22',
+  '交通枢纽', '#3498db',
+  '餐饮美食', '#e74c3c',
+  '购物商圈', '#27ae60',
+  '文化教育', '#9b59b6',
+  '#999'
+]
+```
+
+与 Leaflet 端 `makeIcon()` 的颜色完全一致，保证 2D/3D 视图切换时视觉连续性。
+
+### 4.11 样式切换器（3 套配色）
+
+通过运行时 `setPaintProperty` 切换所有图层的 paint 属性，无需重新加载 Style JSON：
+
+| 样式 | 色调 | 底图色 | 水色 |
+|------|------|--------|------|
+| 街区 (streets) | 暖米 | `#f2efe9` | `#a0c8f0` |
+| 暗色 (dark) | 深蓝灰 | `#1e1e2e` | `#1a3a5c` |
+| 古风 (vintage) | 羊皮纸 | `#f5ecd7` | `#c8d8c0` |
+
+### 4.12 点聚合可视化
+
+```javascript
+maplibreMap.addSource('beijing-pois', {
+  type: 'geojson',
+  data: fc,
+  cluster: true,
+  clusterMaxZoom: 14,
+  clusterRadius: 50      // 50px 聚类半径
+});
+```
+
+- 聚类圆大小 `step(point_count, 18, 5,24, 15,32, 30,40)` — 4 级
+- 聚类圆颜色 `step` 从黄→红
+- 计数文本 `point_count_abbreviated`
+- 地图缩放到 14+ 级自动展开为独立圆点
+
+### 4.13 建筑 3D 拉伸（fill-extrusion）
+
+```javascript
+{
+  id: 'buildings-3d',
+  type: 'fill-extrusion',
+  source: 'osm-vector',
+  'source-layer': 'building',
+  minzoom: 14,
+  paint: {
+    'fill-extrusion-height': [
+      'coalesce',
+      ['get','height'],           // OSM 显式高度
+      ['get','render_height'],    // 预计算渲染高度
+      ['*', ['coalesce', ['get','building:levels'], 3], 3]  // 层数×3m 估算
+    ],
+    'fill-extrusion-color': [
+      'interpolate', ['linear'],
+      ['coalesce', ['get','height'], ['get','render_height'], ...],
+      0, '#d5cfc7', 50, '#b8a090', 150, '#a89888', 300, '#988878'
+    ]
+  }
+}
+```
+
+`coalesce` 表达式按优先级回退：`height`（精确值） → `render_height`（预计算） → `building:levels × 3`（估算）。颜色按高度渐变（浅→深），增强立体感。
+
 ---
 
 ## 五、数据说明
@@ -350,11 +471,12 @@ MapLibre GL JS 需要 WebGL 支持。
 
 ```
 gis-portfolio/
-├── index.html                    # 主页面（HTML + CSS + JS，1027 行）
+├── index.html                    # 主页面（HTML + CSS + JS，1380+ 行）
 ├── data/
 │   ├── beijing-pois.geojson      # 北京 20 个 POI 空间数据
 │   └── beijing-districts.geojson # 北京 16 区行政区划（含人口/面积/GDP）
-└── README.md                     # 实验报告（本文件）
+├── report-lecture10.md           # 第10讲专题地图实验报告
+└── README.md                     # 综合实验报告（本文件）
 ```
 
 ---
