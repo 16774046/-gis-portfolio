@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人 GIS 作品集 — 北京城市 POI 地图</title>
+
+<!-- Leaflet 1.9.4 -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- MapLibre GL JS 4.7+ -->
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+<style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  display: flex; height: 100vh; overflow: hidden;
+  color: #e0e0e0; background: #1a1a2e;
+}
+
+/* ===== Sidebar ===== */
+#sidebar {
+  width: 340px; min-width: 340px; height: 100vh;
+  background: linear-gradient(180deg, #16213e 0%, #0f3460 100%);
+  display: flex; flex-direction: column; z-index: 1000;
+  box-shadow: 2px 0 20px rgba(0,0,0,0.5); overflow-y: auto;
+}
+
+#sidebar header {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #e94560 0%, #c23152 100%);
+  text-align: center;
+}
+#sidebar header h1 { font-size: 1.3rem; font-weight: 700; color: #fff; letter-spacing: 1px; }
+#sidebar header p  { font-size: 0.78rem; color: rgba(255,255,255,0.8); margin-top: 4px; }
+
+.section {
+  padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.section-title {
+  font-size: 0.85rem; font-weight: 700; color: #e94560;
+  text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ===== View Tabs ===== */
+.view-tabs { display: flex; margin-bottom: 4px; }
+.view-tab {
+  flex: 1; padding: 10px; text-align: center; cursor: pointer;
+  font-size: 0.82rem; font-weight: 600; border: none;
+  background: rgba(255,255,255,0.04); color: #888;
+  transition: all 0.2s;
+}
+.view-tab:first-child { border-radius: 6px 0 0 6px; }
+.view-tab:last-child  { border-radius: 0 6px 6px 0; }
+.view-tab.active { background: #e94560; color: #fff; }
+.view-tab:hover:not(.active) { background: rgba(255,255,255,0.08); color: #ccc; }
+
+/* ===== Bookmarks ===== */
+.bookmark-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.bookmark-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: rgba(255,255,255,0.04); border-radius: 8px; cursor: pointer;
+  transition: all 0.2s; border: 1px solid transparent;
+}
+.bookmark-item:hover { background: rgba(233,69,96,0.12); border-color: rgba(233,69,96,0.3); }
+.bookmark-icon { font-size: 1.2rem; width: 28px; text-align: center; flex-shrink: 0; }
+.bookmark-info { flex: 1; min-width: 0; }
+.bookmark-name { font-size: 0.82rem; font-weight: 600; color: #e0e0e0; }
+.bookmark-desc { font-size: 0.7rem; color: #888; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== POI Filter ===== */
+.poi-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.poi-filter-btn {
+  padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.04); color: #aaa; cursor: pointer;
+  font-size: 0.73rem; transition: all 0.2s; white-space: nowrap;
+}
+.poi-filter-btn:hover { border-color: rgba(255,255,255,0.3); color: #ddd; }
+.poi-filter-btn.active { color: #fff; border-color: transparent; }
+.poi-filter-btn.cat-scenic  { --c: #e67e22; }
+.poi-filter-btn.cat-transport { --c: #3498db; }
+.poi-filter-btn.cat-dining  { --c: #e74c3c; }
+.poi-filter-btn.cat-shopping { --c: #27ae60; }
+.poi-filter-btn.cat-culture { --c: #9b59b6; }
+.poi-filter-btn.active { background: var(--c); border-color: var(--c); }
+
+/* ===== Measurement ===== */
+.measure-btns { display: flex; gap: 8px; }
+.measure-btn {
+  flex: 1; padding: 9px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06); color: #ccc; cursor: pointer;
+  font-size: 0.78rem; font-weight: 600; transition: all 0.2s;
+}
+.measure-btn:hover { background: rgba(255,255,255,0.12); }
+.measure-btn.active { background: #e94560; border-color: #e94560; color: #fff; }
+.measure-result { font-size: 0.75rem; color: #888; margin-top: 8px; text-align: center; min-height: 18px; }
+
+/* ===== Coordinate ===== */
+.coord-display {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.78rem; color: #aaa; text-align: center;
+  padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px;
+}
+.coord-display span { color: #e94560; font-weight: 600; }
+
+/* ===== Map Area ===== */
+#map-container { flex: 1; position: relative; }
+#leaflet-map { width: 100%; height: 100%; }
+#maplibre-map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; display: none; }
+
+/* ===== Scale bar restyle ===== */
+.leaflet-control-scale-line {
+  background: rgba(0,0,0,0.7) !important; border-color: rgba(255,255,255,0.2) !important;
+  color: #ccc !important; font-size: 10px !important;
+}
+
+/* ===== Scrollbar ===== */
+#sidebar::-webkit-scrollbar, .bookmark-list::-webkit-scrollbar { width: 4px; }
+#sidebar::-webkit-scrollbar-thumb, .bookmark-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  #sidebar { width: 100%; min-width: 100%; height: auto; max-height: 45vh; }
+  #map-container { height: 55vh; }
+}
+
+/* ===== Legend ===== */
+.legend {
+  background: rgba(22,33,62,0.92); padding: 12px 16px; border-radius: 8px;
+  font-size: 0.73rem; color: #ccc; line-height: 1.8;
+}
+.legend-dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle;
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== Sidebar ===================== -->
+<div id="sidebar">
+  <header>
+    <h1>🗺️ 个人 GIS 作品集</h1>
+    <p>北京市城市 POI 综合地图</p>
+  </header>
+
+  <!-- View Switcher -->
+  <div class="section">
+    <div class="view-tabs">
+      <button class="view-tab active" data-view="leaflet">📋 2D 地图 (Leaflet)</button>
+      <button class="view-tab" data-view="maplibre">🏔️ 3D 地形 (MapLibre)</button>
+    </div>
+  </div>
+
+  <!-- Bookmarks -->
+  <div class="section">
+    <div class="section-title">📍 地图书签</div>
+    <div class="bookmark-list" id="bookmarkList"></div>
+  </div>
+
+  <!-- POI Category Filter -->
+  <div class="section">
+    <div class="section-title">🏷️ POI 分类筛选</div>
+    <div class="poi-filters" id="poiFilters">
+      <button class="poi-filter-btn cat-scenic active" data-cat="景点名胜">🟠 景点名胜</button>
+      <button class="poi-filter-btn cat-transport active" data-cat="交通枢纽">🔵 交通枢纽</button>
+      <button class="poi-filter-btn cat-dining active" data-cat="餐饮美食">🔴 餐饮美食</button>
+      <button class="poi-filter-btn cat-shopping active" data-cat="购物商圈">🟢 购物商圈</button>
+      <button class="poi-filter-btn cat-culture active" data-cat="文化教育">🟣 文化教育</button>
+    </div>
+  </div>
+
+  <!-- Measurement -->
+  <div class="section">
+    <div class="section-title">📏 测量工具</div>
+    <div class="measure-btns">
+      <button class="measure-btn" id="btnMeasureDist">📐 测距</button>
+      <button class="measure-btn" id="btnMeasureClear">🗑️ 清除</button>
+    </div>
+    <div class="measure-result" id="measureResult">点击"测距"开始在地图上点击测量</div>
+  </div>
+
+  <!-- Coordinate -->
+  <div class="section">
+    <div class="section-title">📍 鼠标坐标 (WGS84)</div>
+    <div class="coord-display">
+      经度 <span id="coordLng">116.3974</span>°E &nbsp;|&nbsp;
+      纬度 <span id="coordLat">39.9042</span>°N
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="section">
+    <div class="section-title">📋 图例说明</div>
+    <div class="legend">
+      <div><span class="legend-dot" style="background:#e67e22"></span> 景点名胜</div>
+      <div><span class="legend-dot" style="background:#3498db"></span> 交通枢纽</div>
+      <div><span class="legend-dot" style="background:#e74c3c"></span> 餐饮美食</div>
+      <div><span class="legend-dot" style="background:#27ae60"></span> 购物商圈</div>
+      <div><span class="legend-dot" style="background:#9b59b6"></span> 文化教育</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="padding: 12px 20px; font-size: 0.68rem; color: #555; text-align: center; margin-top: auto;">
+    数据来源: OpenStreetMap · 天地图<br>
+    基于 Leaflet 1.9.4 & MapLibre GL JS 4.7+
+  </div>
+</div>
+
+<!-- ===================== Map ===================== -->
+<div id="map-container">
+  <div id="leaflet-map"></div>
+  <div id="maplibre-map"></div>
+</div>
+
+<!-- ===================== Scripts ===================== -->
+<script>
+/* ============================================================
+   Configuration
+   ============================================================ */
+const TIANDITU_KEY = 'e83ba60b6a083c9c35f1e2a9b7e0a6e8'; // 天地图 demo key, 请替换为你的 key
+const MAP_CENTER   = [39.9163, 116.3972];          // 故宫为中心
+const MAP_ZOOM     = 12;
+
+/* ============================================================
+   Category color mapping
+   ============================================================ */
+const CAT_COLORS = {
+  '景点名胜': '#e67e22',
+  '交通枢纽': '#3498db',
+  '餐饮美食': '#e74c3c',
+  '购物商圈': '#27ae60',
+  '文化教育': '#9b59b6'
+};
+
+const CAT_ICONS = {
+  '景点名胜': '🏛️',
+  '交通枢纽': '🚄',
+  '餐饮美食': '🍜',
+  '购物商圈': '🛍️',
+  '文化教育': '🎓'
+};
+
+/* ============================================================
+   Custom marker icon factory (DivIcon)
+   ============================================================ */
+function makeIcon(category, isSelected) {
+  const color = CAT_COLORS[category] || '#999';
+  const emoji = CAT_ICONS[category] || '📍';
+  const scale = isSelected ? 1.3 : 1;
+  const size = 32 * scale;
+  return L.divIcon({
+    className: 'custom-poi-icon',
+    html: `<div style="
+      width:${size}px;height:${size}px;line-height:${size}px;text-align:center;
+      font-size:${18*scale}px;background:${color};border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,0.4);
+      border:2px solid #fff;cursor:pointer;
+    "><span style="display:inline-block;transform:rotate(45deg)">${emoji}</span></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size/2, size],
+    popupAnchor: [0, -size]
+  });
+}
+
+/* ============================================================
+   Leaflet Map Initialization
+   ============================================================ */
+const leafletMap = L.map('leaflet-map', {
+  center: MAP_CENTER,
+  zoom: MAP_ZOOM,
+  zoomControl: true
+});
+
+// Scale bar
+L.control.scale({
+  metric: true, imperial: false,
+  position: 'bottomright',
+  maxWidth: 200
+}).addTo(leafletMap);
+
+/* ---- Base Maps ---- */
+
+// OSM
+const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
+  maxZoom: 19
+});
+
+// Tianditu Vector (base + annotation)
+const tdtVec = L.tileLayer(
+  `https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`,
+  { subdomains: ['0','1','2','3','4','5','6','7'], maxZoom: 18, attribution: '&copy; 天地图' }
+);
+const tdtCva = L.tileLayer(
+  `https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`,
+  { subdomains: ['0','1','2','3','4','5','6','7'], maxZoom: 18 }
+);
+const tdtVector = L.layerGroup([tdtVec, tdtCva]);
+
+// Tianditu Satellite (image + annotation)
+const tdtImg = L.tileLayer(
+  `https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`,
+  { subdomains: ['0','1','2','3','4','5','6','7'], maxZoom: 18, attribution: '&copy; 天地图' }
+);
+const tdtCia = L.tileLayer(
+  `https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_KEY}`,
+  { subdomains: ['0','1','2','3','4','5','6','7'], maxZoom: 18 }
+);
+const tdtSatellite = L.layerGroup([tdtImg, tdtCia]);
+
+// CartoDB Positron (light)
+const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://carto.com">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19
+});
+
+// CartoDB Dark
+const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://carto.com">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19
+});
+
+// Base maps object
+const baseMaps = {
+  'OpenStreetMap 标准': osmLayer,
+  '天地图 矢量': tdtVector,
+  '天地图 卫星': tdtSatellite,
+  'CartoDB 浅色': cartoLight,
+  'CartoDB 暗色': cartoDark
+};
+
+// Default: OSM
+osmLayer.addTo(leafletMap);
+
+// Layer control
+L.control.layers(baseMaps, null, {
+  position: 'topright',
+  collapsed: true
+}).addTo(leafletMap);
+
+/* ---- POI Layer Group ---- */
+const poiLayerGroup = L.layerGroup().addTo(leafletMap);
+let allPois = [];          // full GeoJSON features
+let markerMap = new Map(); // feature index -> marker
+let activeCats = new Set(['景点名胜', '交通枢纽', '餐饮美食', '购物商圈', '文化教育']);
+
+/* ============================================================
+   Load GeoJSON & Render POIs
+   ============================================================ */
+function renderPOIs() {
+  poiLayerGroup.clearLayers();
+  markerMap.clear();
+
+  allPois.forEach((feat, idx) => {
+    const cat = feat.properties.category;
+    if (!activeCats.has(cat)) return;
+
+    const coords = feat.geometry.coordinates;
+    const marker = L.marker([coords[1], coords[0]], {
+      icon: makeIcon(cat, false)
+    });
+
+    // Tooltip (hover)
+    marker.bindTooltip(`<b>${feat.properties.name}</b><br><small>${cat}</small>`, {
+      direction: 'top', offset: [0, -28]
+    });
+
+    // Popup (click)
+    const p = feat.properties;
+    marker.bindPopup(`
+      <div style="font-family:sans-serif;min-width:200px">
+        <h3 style="margin:0 0 6px;color:${CAT_COLORS[cat]}">${p.name}</h3>
+        <table style="font-size:0.82rem;line-height:1.6;width:100%">
+          <tr><td style="color:#888">分类</td><td><b>${cat}</b></td></tr>
+          <tr><td style="color:#888">地址</td><td>${p.address || '-'}</td></tr>
+          <tr><td style="color:#888">简介</td><td>${p.description || '-'}</td></tr>
+          ${p.rating ? `<tr><td style="color:#888">评级</td><td>⭐ ${p.rating}</td></tr>` : ''}
+          ${p.hours ? `<tr><td style="color:#888">时间</td><td>${p.hours}</td></tr>` : ''}
+        </table>
+      </div>
+    `, { maxWidth: 300 });
+
+    marker.on('click', () => {
+      // Reset all markers to normal size
+      markerMap.forEach((m) => {
+        const origCat = m._poiCategory;
+        if (origCat) m.setIcon(makeIcon(origCat, false));
+      });
+      // Highlight this one
+      marker.setIcon(makeIcon(cat, true));
+    });
+
+    marker._poiCategory = cat;
+    marker._poiIndex = idx;
+    markerMap.set(idx, marker);
+    marker.addTo(poiLayerGroup);
+  });
+}
+
+fetch('data/beijing-pois.geojson')
+  .then(r => r.json())
+  .then(geojson => {
+    allPois = geojson.features;
+    renderPOIs();
+  })
+  .catch(err => {
+    console.error('Failed to load GeoJSON:', err);
+    // Fallback: embed a subset directly
+    allPois = getEmbeddedPOIs();
+    renderPOIs();
+  });
+
+/* ============================================================
+   POI Filter Buttons
+   ============================================================ */
+document.querySelectorAll('.poi-filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const cat = btn.dataset.cat;
+    if (activeCats.has(cat)) {
+      activeCats.delete(cat);
+      btn.classList.remove('active');
+    } else {
+      activeCats.add(cat);
+      btn.classList.add('active');
+    }
+    renderPOIs();
+  });
+});
+
+/* ============================================================
+   Bookmarks
+   ============================================================ */
+const bookmarks = [
+  { name: '天安门广场', icon: '🏯', desc: '北京市中心 · 世界最大城市广场', center: [39.9042, 116.3974], zoom: 17 },
+  { name: '故宫博物院', icon: '👑', desc: '明清皇宫 · 世界文化遗产', center: [39.9163, 116.3972], zoom: 16 },
+  { name: '颐和园',     icon: '🌿', desc: '皇家园林 · 中国古典园林之首', center: [39.9999, 116.2755], zoom: 15 },
+  { name: '八达岭长城', icon: '🏔️', desc: '万里长城精华段 · 世界奇迹', center: [40.3544, 116.0196], zoom: 14 },
+  { name: '奥林匹克公园', icon: '🏟️', desc: '鸟巢 & 水立方 · 2008奥运主场', center: [39.9917, 116.3904], zoom: 16 },
+  { name: '天坛公园',   icon: '⛩️', desc: '祈年殿 · 明清祭天场所', center: [39.8822, 116.4066], zoom: 16 },
+  { name: '国贸 CBD',   icon: '🏙️', desc: '北京商务中心区 · 摩天大楼群', center: [39.9087, 116.4605], zoom: 15 },
+  { name: '北京全景',   icon: '🌏', desc: '北京市区概览', center: [39.9163, 116.3972], zoom: 11 },
+];
+
+function renderBookmarks() {
+  const list = document.getElementById('bookmarkList');
+  bookmarks.forEach(bm => {
+    const item = document.createElement('div');
+    item.className = 'bookmark-item';
+    item.innerHTML = `
+      <span class="bookmark-icon">${bm.icon}</span>
+      <div class="bookmark-info">
+        <div class="bookmark-name">${bm.name}</div>
+        <div class="bookmark-desc">${bm.desc}</div>
+      </div>`;
+    item.addEventListener('click', () => {
+      flyToView(bm.center, bm.zoom);
+    });
+    list.appendChild(item);
+  });
+}
+
+function flyToView(center, zoom) {
+  const activeView = document.querySelector('.view-tab.active').dataset.view;
+  if (activeView === 'leaflet') {
+    leafletMap.flyTo(center, zoom, { duration: 1.5 });
+  } else if (activeView === 'maplibre' && maplibreMap) {
+    maplibreMap.flyTo({ center: [center[1], center[0]], zoom: zoom, duration: 2000 });
+  }
+}
+
+/* ============================================================
+   Coordinate Display (mouse move)
+   ============================================================ */
+leafletMap.on('mousemove', (e) => {
+  document.getElementById('coordLng').textContent = e.latlng.lng.toFixed(6);
+  document.getElementById('coordLat').textContent = e.latlng.lat.toFixed(6);
+});
+
+/* ============================================================
+   Distance Measurement
+   ============================================================ */
+let measuring = false;
+let measurePoints = [];
+let measureMarkers = [];
+let measureLine = null;
+let measureLabels = [];
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(meters) {
+  if (meters < 1000) return meters.toFixed(1) + ' m';
+  return (meters / 1000).toFixed(2) + ' km';
+}
+
+function clearMeasurement() {
+  measureMarkers.forEach(m => leafletMap.removeLayer(m));
+  if (measureLine) leafletMap.removeLayer(measureLine);
+  measureLabels.forEach(l => leafletMap.removeLayer(l));
+  measureMarkers = [];
+  measureLabels = [];
+  measureLine = null;
+  measurePoints = [];
+  document.getElementById('measureResult').textContent = '点击"测距"开始在地图上点击测量';
+}
+
+function updateMeasureDisplay() {
+  let total = 0;
+  for (let i = 1; i < measurePoints.length; i++) {
+    total += haversine(
+      measurePoints[i-1][0], measurePoints[i-1][1],
+      measurePoints[i][0],   measurePoints[i][1]
+    );
+  }
+  document.getElementById('measureResult').textContent =
+    `已测 ${measurePoints.length - 1} 段 · 总距离: ${formatDistance(total)}`;
+}
+
+function startMeasuring() {
+  if (measuring) return;
+  measuring = true;
+  clearMeasurement();
+  document.getElementById('btnMeasureDist').classList.add('active');
+  document.getElementById('measureResult').textContent = '在地图上点击添加测量点，双击结束测量';
+  leafletMap.getContainer().style.cursor = 'crosshair';
+}
+
+function stopMeasuring() {
+  measuring = false;
+  document.getElementById('btnMeasureDist').classList.remove('active');
+  leafletMap.getContainer().style.cursor = '';
+}
+
+leafletMap.on('click', (e) => {
+  if (!measuring) return;
+
+  const pt = [e.latlng.lat, e.latlng.lng];
+  measurePoints.push(pt);
+
+  // Add marker
+  const dot = L.circleMarker([pt[0], pt[1]], {
+    radius: 6, color: '#e94560', fillColor: '#fff',
+    fillOpacity: 1, weight: 2
+  }).addTo(leafletMap);
+  measureMarkers.push(dot);
+
+  // Update polyline
+  if (measureLine) leafletMap.removeLayer(measureLine);
+  const latlngs = measurePoints.map(p => [p[0], p[1]]);
+  measureLine = L.polyline(latlngs, {
+    color: '#e94560', weight: 3, dashArray: '6 8', opacity: 0.9
+  }).addTo(leafletMap);
+
+  // Add segment labels
+  measureLabels.forEach(l => leafletMap.removeLayer(l));
+  measureLabels = [];
+  for (let i = 1; i < measurePoints.length; i++) {
+    const mid = [
+      (measurePoints[i-1][0] + measurePoints[i][0]) / 2,
+      (measurePoints[i-1][1] + measurePoints[i][1]) / 2
+    ];
+    const dist = haversine(
+      measurePoints[i-1][0], measurePoints[i-1][1],
+      measurePoints[i][0],   measurePoints[i][1]
+    );
+    const label = L.marker(mid, {
+      icon: L.divIcon({
+        className: '',
+        html: `<div style="background:rgba(0,0,0,0.75);color:#fff;padding:2px 6px;
+               border-radius:4px;font-size:11px;white-space:nowrap">${formatDistance(dist)}</div>`,
+        iconSize: [0, 0]
+      })
+    }).addTo(leafletMap);
+    measureLabels.push(label);
+  }
+
+  updateMeasureDisplay();
+});
+
+leafletMap.on('dblclick', () => {
+  if (measuring) stopMeasuring();
+});
+
+document.getElementById('btnMeasureDist').addEventListener('click', () => {
+  if (measuring) { stopMeasuring(); return; }
+  startMeasuring();
+});
+
+document.getElementById('btnMeasureClear').addEventListener('click', () => {
+  stopMeasuring();
+  clearMeasurement();
+});
+
+/* ============================================================
+   MapLibre GL JS 3D View
+   ============================================================ */
+let maplibreMap = null;
+let maplibreInitialized = false;
+
+function initMapLibre() {
+  if (maplibreInitialized) return;
+
+  maplibreMap = new maplibregl.Map({
+    container: 'maplibre-map',
+    style: {
+      version: 8,
+      sources: {
+        'osm-tiles': {
+          type: 'raster',
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          attribution: '&copy; OpenStreetMap contributors'
+        },
+        'terrain-source': {
+          type: 'raster-dem',
+          tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          maxzoom: 15
+        }
+      },
+      layers: [
+        { id: 'osm-layer', type: 'raster', source: 'osm-tiles' }
+      ],
+      sky: {
+        'sky-color': '#199EF3',
+        'sky-horizon-blend': 0.6,
+        'horizon-color': '#f5e6d3',
+        'horizon-fog-blend': 0.8
+      }
+    },
+    center: [MAP_CENTER[1], MAP_CENTER[0]],
+    zoom: MAP_ZOOM - 0.5,
+    pitch: 50,
+    bearing: 0,
+    antialias: true
+  });
+
+  maplibreMap.addControl(new maplibregl.NavigationControl(), 'top-right');
+  maplibreMap.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+
+  maplibreMap.on('load', () => {
+    maplibreMap.setTerrain({
+      source: 'terrain-source',
+      exaggeration: 1.5
+    });
+    maplibreMap.setFog({
+      'range': [0.5, 2.5],
+      'color': '#e5f0f5',
+      'high-color': '#add8e6',
+      'space-color': '#1a1a2e',
+      'horizon-blend': 0.12
+    });
+  });
+
+  maplibreInitialized = true;
+}
+
+/* ============================================================
+   View Switching (2D <-> 3D)
+   ============================================================ */
+document.querySelectorAll('.view-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const view = tab.dataset.view;
+
+    // Update active tab
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    if (view === 'leaflet') {
+      document.getElementById('leaflet-map').style.display = '';
+      document.getElementById('maplibre-map').style.display = 'none';
+      leafletMap.invalidateSize();
+    } else {
+      document.getElementById('leaflet-map').style.display = 'none';
+      document.getElementById('maplibre-map').style.display = '';
+      if (!maplibreInitialized) initMapLibre();
+      maplibreMap.resize();
+
+      // Sync center/zoom from Leaflet
+      const lCenter = leafletMap.getCenter();
+      const lZoom   = leafletMap.getZoom();
+      maplibreMap.jumpTo({
+        center: [lCenter.lng, lCenter.lat],
+        zoom: lZoom - 0.5
+      });
+    }
+  });
+});
+
+/* ============================================================
+   Keyboard shortcuts
+   ============================================================ */
+document.addEventListener('keydown', (e) => {
+  switch(e.key.toLowerCase()) {
+    case 'm': // toggle measurement
+      if (measuring) stopMeasuring(); else startMeasuring();
+      break;
+    case 'escape':
+      if (measuring) stopMeasuring();
+      break;
+    case '1': flyToView(bookmarks[0].center, bookmarks[0].zoom); break;
+    case '2': flyToView(bookmarks[1].center, bookmarks[1].zoom); break;
+    case '3': flyToView(bookmarks[2].center, bookmarks[2].zoom); break;
+    case '4': flyToView(bookmarks[3].center, bookmarks[3].zoom); break;
+    case '0': flyToView(bookmarks[7].center, bookmarks[7].zoom); break;
+  }
+});
+
+/* ============================================================
+   Embedded fallback POI data (in case GeoJSON file unreachable)
+   ============================================================ */
+function getEmbeddedPOIs() {
+  return [
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3974,39.9042]}, properties:{name:'天安门广场',category:'景点名胜',address:'北京市东城区长安街',description:'世界上最大的城市中心广场',rating:'5A',hours:'全天开放'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3972,39.9163]}, properties:{name:'故宫博物院',category:'景点名胜',address:'北京市东城区景山前街4号',description:'明清两代皇家宫殿，世界文化遗产',rating:'5A',hours:'08:30-17:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.2755,39.9999]}, properties:{name:'颐和园',category:'景点名胜',address:'北京市海淀区新建宫门路19号',description:'清代皇家园林，中国古典园林之首',rating:'5A',hours:'06:30-18:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.0196,40.3544]}, properties:{name:'八达岭长城',category:'景点名胜',address:'北京市延庆区',description:'万里长城的精华段，世界文化遗产',rating:'5A',hours:'06:30-19:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.4066,39.8822]}, properties:{name:'天坛公园',category:'景点名胜',address:'北京市东城区天坛内东里7号',description:'明清皇帝祭天场所',rating:'5A',hours:'06:00-22:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3904,39.9917]}, properties:{name:'国家体育场（鸟巢）',category:'景点名胜',address:'北京市朝阳区',description:'2008年北京奥运会主体育场',rating:'5A',hours:'09:00-17:30'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3843,39.9914]}, properties:{name:'水立方',category:'景点名胜',address:'北京市朝阳区天辰东路11号',description:'2008年奥运会游泳场馆',rating:'5A',hours:'09:00-18:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.6152,40.0530]}, properties:{name:'首都机场T3',category:'交通枢纽',address:'北京市顺义区',description:'中国最繁忙的国际机场之一',rating:'',hours:'24小时'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.4274,39.9047]}, properties:{name:'北京站',category:'交通枢纽',address:'北京市东城区',description:'北京四大铁路客运站之一',rating:'',hours:'24小时'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3790,39.8650]}, properties:{name:'北京南站',category:'交通枢纽',address:'北京市丰台区',description:'京津城际、京沪高铁始发站',rating:'',hours:'24小时'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.4107,39.9143]}, properties:{name:'王府井小吃街',category:'餐饮美食',address:'北京市东城区王府井大街',description:'汇聚老北京传统小吃',rating:'4.5',hours:'10:00-22:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.4230,39.9386]}, properties:{name:'簋街',category:'餐饮美食',address:'北京市东城区东直门内大街',description:'北京夜宵第一街，麻辣小龙虾发源地',rating:'4.3',hours:'17:00-04:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.4551,39.9322]}, properties:{name:'三里屯太古里',category:'购物商圈',address:'北京市朝阳区三里屯路19号',description:'北京时尚潮流地标',rating:'4.6',hours:'10:00-22:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.4605,39.9087]}, properties:{name:'国贸商城',category:'购物商圈',address:'北京市朝阳区建国门外大街1号',description:'北京CBD核心商业综合体',rating:'4.5',hours:'10:00-21:30'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3754,39.9115]}, properties:{name:'西单大悦城',category:'购物商圈',address:'北京市西城区西单北大街131号',description:'西单商圈核心商场',rating:'4.4',hours:'10:00-22:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3269,39.9999]}, properties:{name:'清华大学',category:'文化教育',address:'北京市海淀区清华园',description:'中国顶尖高等学府',rating:'',hours:'需预约'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3056,39.9963]}, properties:{name:'北京大学',category:'文化教育',address:'北京市海淀区颐和园路5号',description:'中国最高学府之一',rating:'',hours:'需预约'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.4951,39.9842]}, properties:{name:'798艺术区',category:'文化教育',address:'北京市朝阳区酒仙桥路4号',description:'由旧工厂改造的现代艺术区',rating:'4.5',hours:'10:00-18:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.3925,39.9033]}, properties:{name:'国家大剧院',category:'文化教育',address:'北京市西城区西长安街2号',description:'蛋形建筑，世界级表演艺术中心',rating:'5A',hours:'09:00-17:00'} },
+    { type:'Feature', geometry:{type:'Point',coordinates:[116.4038,39.9380]}, properties:{name:'南锣鼓巷',category:'景点名胜',address:'北京市东城区',description:'北京最古老的胡同街区之一',rating:'4.3',hours:'全天'} }
+  ];
+}
+
+/* ============================================================
+   Initialization
+   ============================================================ */
+renderBookmarks();
+</script>
+
+</body>
+</html>
